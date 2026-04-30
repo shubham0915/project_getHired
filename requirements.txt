@@ -1,0 +1,10 @@
+presidio-analyzer
+presidio-anonymizer
+faker
+pandas
+streamlit
+spacy
+sdv
+pyffx
+matplotlib
+seaborn
