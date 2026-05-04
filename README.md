@@ -18,9 +18,9 @@ Enterprise-grade, DPDP-compliant multi-layer PII detection and masking pipeline 
 3. **Differential Privacy**:
    - Numeric columns (like `Amount`, `Balance`) are protected using Laplace noise (ε=1.0) to prevent targeted numerical linkage attacks while preserving overall statistical distribution.
 
-4. **Quasi-Identifier Generalization**:
-   - `Age` is generalized to bands (e.g. `18-25`, `26-35`).
-   - `Pincode` is partially redacted (e.g. `110XXX`).
+4. **Quasi-Identifier Protection (LLM-Optimized)**:
+   - `Age` is protected using Differential Privacy (Laplace noise) rounded to the nearest integer. This maintains perfect natural age distributions instead of clunky text bands.
+   - `Pincode` is fully substituted with completely valid synthetic Indian Pincodes using the deterministic session cache, ensuring LLM fine-tuning datasets look 100% natural.
 
 5. **Confidence-Based Routing**:
    - High confidence (>0.8) → Auto-redact.

@@ -419,30 +419,29 @@ class MaskingPipeline:
     # -----------------------------------------------------------------------
 
     def _generalize_quasi_identifiers(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Generalize quasi-identifiers (Age → age band, Pincode → partial)."""
+        """Protect quasi-identifiers using LLM-friendly techniques (DP and Synthetics)."""
         
         if 'Age' in df.columns:
-            logger.info("  Generalizing 'Age' → age bands")
-            df['Age'] = df['Age'].apply(self._generalize_age)
+            logger.info("  Applying Laplace noise to 'Age' (ε=1.0) for DP")
+            valid_ages = df['Age'].dropna().astype(float)
+            if len(valid_ages) > 0:
+                epsilon = 1.0
+                sensitivity = float(valid_ages.max() - valid_ages.min()) if len(valid_ages) > 1 else 10.0
+                scale = sensitivity / epsilon
+                noise = np.random.laplace(0, scale, len(df['Age']))
+                # Round to integer and clip to realistic ages to maintain natural data shape
+                df['Age'] = (df['Age'].astype(float) + noise).round().clip(lower=18, upper=100)
 
         if 'Pincode' in df.columns:
-            logger.info("  Generalizing 'Pincode' → partial")
+            logger.info("  Generating synthetic 'Pincode' for referential integrity")
             df['Pincode'] = df['Pincode'].apply(
-                lambda x: str(x)[:3] + "XXX" if pd.notna(x) else x
+                lambda x: self.masker.mask(
+                    str(int(float(x))) if pd.notna(x) and str(x).replace('.','',1).isdigit() else str(x), 
+                    "pincode"
+                ) if pd.notna(x) else x
             )
 
         return df
-
-    @staticmethod
-    def _generalize_age(age) -> str:
-        if pd.isna(age):
-            return age
-        age = int(age)
-        if age < 25: return "18-25"
-        elif age < 35: return "26-35"
-        elif age < 50: return "36-50"
-        elif age < 65: return "51-65"
-        else: return "65+"
 
     # -----------------------------------------------------------------------
     # Free-Text Masking (Gap 5 — Mentor requirement for unstructured data)
