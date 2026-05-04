@@ -159,5 +159,14 @@ streamlit run app.py
    - **Tab 5: Leakage Audit**: Run the "Targeted Attack Simulation" to prove that PII is unrecoverable.
    - **Tab 6: Text Masking**: Paste free-text logs and see unstructured PII masked in real-time.
 
+## 🧠 Technical Design Decisions: Why GLiNER?
+
+For Layer 2 (Contextual NER), we chose **GLiNER** over Generative Small Language Models (SLMs) like Microsoft Phi or Google Gemma for four strategic reasons:
+
+1. **Exact Precision**: GLiNER is an *encoder-based* model that provides exact character-level offsets (start/end indices) for every entity. Generative SLMs often output JSON or natural language, making it difficult to map detections back to the original text without alignment errors.
+2. **Deterministic Extraction**: Unlike generative models, GLiNER does not "hallucinate" or rewrite the text. It strictly classifies existing tokens, ensuring the substitution engine has the exact original value to cache.
+3. **Extreme Efficiency**: At ~300M parameters, GLiNER is **10x smaller and faster** than the smallest generative SLMs (which start at 2B-3B parameters). This allows for high-throughput log processing on standard CPUs without requiring expensive GPUs.
+4. **Zero-Shot Flexibility**: It allows us to define any custom PII label (e.g., `bank_account`) in `pii_config.yaml` and detect it instantly without fine-tuning, which is significantly more difficult and expensive with prompt-based SLMs.
+
 ## ⚙️ Configuration
 Add or modify regex patterns, GLiNER labels, and routing thresholds in `config/pii_config.yaml` without changing core Python code.
