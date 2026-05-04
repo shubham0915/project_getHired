@@ -406,11 +406,25 @@ class MaskingPipeline:
 
             logger.info(f"  Applying Laplace noise to '{col}' (ε=1.0)")
             
+            # Use a smaller realistic sensitivity for age
+            is_age = col.lower() == 'age'
+            is_integer = is_age or pd.api.types.is_integer_dtype(df[col].dropna())
+            
             epsilon = 1.0
-            sensitivity = float(df[col].max() - df[col].min()) if len(df[col].dropna()) > 0 else 1000.0
+            if is_age:
+                sensitivity = 5.0
+            else:
+                sensitivity = float(df[col].max() - df[col].min()) if len(df[col].dropna()) > 0 else 1000.0
+                
             scale = sensitivity / epsilon
             noise = np.random.laplace(0, scale, len(df[col]))
-            df[col] = (df[col] + noise).round(2).clip(lower=0)
+            
+            if is_integer:
+                df[col] = (df[col] + noise).round().astype('Int64').clip(lower=0)
+                if is_age:
+                    df[col] = df[col].clip(lower=18, upper=100)
+            else:
+                df[col] = (df[col] + noise).round(2).clip(lower=0)
 
         return df
 
@@ -419,22 +433,15 @@ class MaskingPipeline:
     # -----------------------------------------------------------------------
 
     def _generalize_quasi_identifiers(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Protect quasi-identifiers using LLM-friendly techniques (DP and Synthetics)."""
+        """Protect quasi-identifiers using LLM-friendly techniques (Synthetics)."""
         
-        if 'Age' in df.columns:
-            logger.info("  Applying Laplace noise to 'Age' (ε=1.0) for DP")
-            valid_ages = df['Age'].dropna().astype(float)
-            if len(valid_ages) > 0:
-                epsilon = 1.0
-                sensitivity = float(valid_ages.max() - valid_ages.min()) if len(valid_ages) > 1 else 10.0
-                scale = sensitivity / epsilon
-                noise = np.random.laplace(0, scale, len(df['Age']))
-                # Round to integer and clip to realistic ages to maintain natural data shape
-                df['Age'] = (df['Age'].astype(float) + noise).round().clip(lower=18, upper=100)
-
-        if 'Pincode' in df.columns:
-            logger.info("  Generating synthetic 'Pincode' for referential integrity")
-            df['Pincode'] = df['Pincode'].apply(
+        # Note: Age is now natively protected by _protect_numeric_columns using DP
+        
+        # Find pincode column case-insensitively
+        pincode_col = next((c for c in df.columns if c.lower() == 'pincode'), None)
+        if pincode_col:
+            logger.info(f"  Generating synthetic '{pincode_col}' for referential integrity")
+            df[pincode_col] = df[pincode_col].apply(
                 lambda x: self.masker.mask(
                     str(int(float(x))) if pd.notna(x) and str(x).replace('.','',1).isdigit() else str(x), 
                     "pincode"
