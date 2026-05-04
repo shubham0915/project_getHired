@@ -8,4 +8,5 @@ env/
 .env
 .DS_Store
 *.csv
-RESEARCH/
+# Research files are now tracked for hackathon visibility
+# RESEARCH/
