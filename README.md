@@ -5,19 +5,21 @@ Enterprise-grade, DPDP-compliant multi-layer PII detection and masking pipeline 
 ## 🌟 Key Features
 
 1. **Multi-Layer Architecture**:
-   - **Layer 1 (Regex)**: Deterministic high-speed matching for structured PII (PAN, Aadhaar, Phone, Email, including obfuscated patterns like `jane (at) example (dot) com`).
-   - **Layer 2 (GLiNER NER)**: Context-aware zero-shot detection for unstructured free-text (Names, Addresses). Supports multiple models including `nvidia/gliner-PII`.
-   - **Layer 3 (Validation)**: Output re-scanning to guarantee zero leakage.
+   - **Layer 1 (Regex + Intelligent Discovery)**: Deterministic matching for structured PII. Includes **Luhn Algorithm Validation** for Credit Cards to prevent false positives.
+   - **Layer 2 (GLiNER NER)**: Context-aware zero-shot detection for unstructured text.
+   - **Layer 3 (Validation)**: Recursive re-scanning to guarantee zero leakage.
 
-2. **Irreversible Masking (Faker-based)**:
-   - Full substitution of sensitive values with realistic synthetic data.
-   - **Deterministic Session Cache**: A given identity (e.g. `Priya Sharma`) always maps to the same synthetic identity within a run to preserve referential integrity.
-   - **Smart Partial-Name Matching**: The engine intelligently splits full names. If "Rajesh Sharma" becomes "Krishna Choudhury", a later isolated mention of "rajesh" will automatically become "Krishna", even in reverse-order text processing!
-   - **Gender-Aware Indian Names**: Heuristic gender inference ensures Indian male names map to Indian male names, and female to female.
+2. **Semantic Transformation (Digital Twin)**:
+   - **Synthetic Substitution**: Irreversible Faker-based substitution that preserves natural language flow for LLM fine-tuning.
+   - **Referential Integrity**: Deterministic caching ensures `Rajesh` always maps to `Krishna` across the entire session.
 
-3. **Differential Privacy & Dynamic Type Inference**:
-   - Numeric columns (like `Amount`, `Balance`) are protected using Laplace noise (ε=1.0) to prevent targeted numerical linkage attacks while preserving overall statistical distribution.
-   - **Smart Type Preservation**: The engine intelligently detects if a column contains Integers (like `Age` or `Count`) or Floats (like `Balance`). It applies the correct mathematical noise and automatically rounds back to the original datatype, so you never end up with a "19.21 year old."
+3. **Advanced Utility Metrics (Market Standard 2026)**:
+   - **Jensen-Shannon Divergence**: Symmetric distribution similarity check for numeric data.
+   - **Semantic Utility Score**: Word-overlap analysis (Jaccard) to ensure the model learns "human-speak," not "redacted-speak."
+
+4. **Differential Privacy & Dynamic Type Inference**:
+   - **Laplace Noise (ε=1.0)**: Protects numeric values while maintaining statistical shape.
+   - **Smart Type Preservation**: Detects Integers vs Floats to prevent "19.21 year old" artifacts.
 
 4. **Content-First, Schema-Agnostic Processing**:
    - The pipeline does not blindly trust column headers. Irrelevant column names (like `col_4`) are automatically analyzed based on their content. If they contain pure numbers, they receive Differential Privacy. If they contain text, they are scanned by Regex and GLiNER to uncover hidden PII.

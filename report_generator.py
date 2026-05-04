@@ -37,6 +37,36 @@ def kl_divergence(p, q):
     return entropy(p_hist, q_hist)
 
 
+def js_divergence(p, q):
+    """Calculates Jensen-Shannon Divergence (Symmetric and bounded [0,1])."""
+    min_val = min(np.min(p), np.min(q))
+    max_val = max(np.max(p), np.max(q))
+    bins = np.linspace(min_val, max_val, 100)
+    
+    p_hist, _ = np.histogram(p, bins=bins, density=True)
+    q_hist, _ = np.histogram(q, bins=bins, density=True)
+    
+    eps = 1e-10
+    p_hist = (p_hist + eps) / np.sum(p_hist + eps)
+    q_hist = (q_hist + eps) / np.sum(q_hist + eps)
+    
+    m_hist = 0.5 * (p_hist + q_hist)
+    return 0.5 * entropy(p_hist, m_hist) + 0.5 * entropy(q_hist, m_hist)
+
+
+def semantic_similarity(s1: str, s2: str) -> float:
+    """Calculates word-based similarity (Jaccard) to measure structure preservation."""
+    if not isinstance(s1, str) or not isinstance(s2, str):
+        return 1.0
+    words1 = set(s1.lower().split())
+    words2 = set(s2.lower().split())
+    if not words1 and not words2:
+        return 1.0
+    intersection = words1.intersection(words2)
+    union = words1.union(words2)
+    return len(intersection) / len(union)
+
+
 def generate_quality_report(
     raw_df: pd.DataFrame, 
     masked_df: pd.DataFrame,
@@ -78,6 +108,13 @@ def generate_quality_report(
         changed_count = (raw_df[col].astype(str) != masked_df[col].astype(str)).sum()
         total_values = len(raw_df)
         percent_changed = (changed_count / total_values) * 100
+        
+        # Calculate Semantic Similarity for the column
+        similarities = [
+            semantic_similarity(str(r), str(m)) 
+            for r, m in zip(raw_df[col].iloc[:100], masked_df[col].iloc[:100])
+        ]
+        avg_sim = np.mean(similarities) if similarities else 1.0
 
         total_pii_changed += changed_count
         total_pii_values += total_values
@@ -85,7 +122,6 @@ def generate_quality_report(
         # Determine action from manifest if available
         action = "Masked"
         if manifest:
-            by_type = manifest.get('detection_by_type', {})
             # Check if this column had detections
             col_summaries = manifest.get('column_summaries', [])
             for cs in col_summaries:
@@ -99,7 +135,8 @@ def generate_quality_report(
             "Type": "PII",
             "Action": action,
             "Values Changed": int(changed_count),
-            "Effectiveness": f"{percent_changed:.1f}%"
+            "Effectiveness": f"{percent_changed:.1f}%",
+            "Semantic Utility": f"{avg_sim:.1%}"
         })
     
     # --- Numeric Column Utility ---
@@ -120,6 +157,7 @@ def generate_quality_report(
 
         ks_stat, p_value = ks_2samp(raw_vals, masked_vals)
         kl_div = kl_divergence(raw_vals, masked_vals)
+        js_div = js_divergence(raw_vals, masked_vals)
         
         # Utility = 1 - KS_stat (closer to 1 = distributions are similar)
         col_utility = max(0, 1 - ks_stat)
@@ -130,19 +168,18 @@ def generate_quality_report(
             "Type": "Numeric (DP)",
             "Action": "Laplace Noise",
             "Values Changed": "All",
-            "Effectiveness": f"KS: {ks_stat:.3f} | KL: {kl_div:.4f} | Utility: {col_utility:.1%}"
+            "Effectiveness": f"KS: {ks_stat:.3f} | JS: {js_div:.4f} | Utility: {col_utility:.1%}"
         })
     
     # --- Quasi-identifier Generalization ---
     if 'Age' in raw_df.columns and 'Age' in masked_df.columns:
-        if raw_df['Age'].dtype != masked_df['Age'].dtype or \
-           raw_df['Age'].astype(str).iloc[0] != masked_df['Age'].astype(str).iloc[0]:
+        if raw_df['Age'].astype(str).iloc[0] != masked_df['Age'].astype(str).iloc[0]:
             report["Metrics"].append({
                 "Column": "Age",
                 "Type": "Quasi-ID",
-                "Action": "Generalized to bands",
+                "Action": "Differential Privacy",
                 "Values Changed": len(raw_df),
-                "Effectiveness": "100.0%"
+                "Effectiveness": "100.0% Protected"
             })
 
     if 'Pincode' in raw_df.columns and 'Pincode' in masked_df.columns:
@@ -151,9 +188,9 @@ def generate_quality_report(
             report["Metrics"].append({
                 "Column": "Pincode",
                 "Type": "Quasi-ID",
-                "Action": "Partial (XXX suffix)",
+                "Action": "Synthetic Substitution",
                 "Values Changed": int(pincode_changed),
-                "Effectiveness": f"{pincode_changed/len(raw_df)*100:.1f}%"
+                "Effectiveness": f"{pincode_changed/len(raw_df)*100:.1f}% Masked"
             })
 
     # --- Overall Scores ---

@@ -215,12 +215,18 @@ class MaskingPipeline:
 
                 matches = self.regex_scanner.scan_value(str(value), column_name=col)
                 
-                if not matches:
+                # Intelligent Discovery: Filter matches using checksums (Gap 1 in user text)
+                valid_matches = [
+                    m for m in matches 
+                    if self._validate_with_checksum(m.matched_text, m.pattern_name)
+                ]
+                
+                if not valid_matches:
                     continue
 
                 # Replace each match in the cell value
                 masked_value = str(value)
-                for match in sorted(matches, key=lambda m: m.start, reverse=True):
+                for match in sorted(valid_matches, key=lambda m: m.start, reverse=True):
                     replacement = self.masker.mask(match.matched_text, match.faker_method)
                     masked_value = (
                         masked_value[:match.start] + replacement + masked_value[match.end:]
@@ -245,6 +251,24 @@ class MaskingPipeline:
                 logger.info(f"  Column '{col}': {detection_count} regex detections")
 
         return df, manifest
+
+    def _validate_with_checksum(self, text: str, pattern_name: str) -> bool:
+        """Verify if a detected string passes its expected checksum (e.g. Luhn for CC)."""
+        if pattern_name == "credit_card":
+            # Remove non-digits
+            digits = [int(d) for d in str(text) if d.isdigit()]
+            if not digits: return False
+            # Luhn Algorithm
+            checksum = digits[-1]
+            payload = digits[:-1][::-1]
+            total = checksum
+            for i, d in enumerate(payload):
+                if i % 2 == 0:
+                    d *= 2
+                    if d > 9: d -= 9
+                total += d
+            return (total % 10 == 0)
+        return True # Default to True for other patterns
 
     # -----------------------------------------------------------------------
     # Phase 2.5: Identity Column Fallback (Names without GLiNER)
