@@ -17,7 +17,10 @@ Enterprise-grade, DPDP-compliant multi-layer PII detection and masking pipeline 
    - **Jensen-Shannon Divergence**: Symmetric distribution similarity check for numeric data.
    - **Semantic Utility Score**: Word-overlap analysis (Jaccard) to ensure the model learns "human-speak," not "redacted-speak."
 
-4. **Differential Privacy & Dynamic Type Inference**:
+4. **Membership Inference Attack (MIA) Protection**:
+   - **Neural Memorization Defense**: Recent research (e.g., Purdue/Cisco 'SOFT' framework) proves that LLMs memorize training data after just one epoch. Our pipeline neutralizes this by ensuring the AI never sees real PII, preventing attackers from "extracting" identities from the trained model's weights.
+
+5. **Differential Privacy & Dynamic Type Inference**:
    - **Laplace Noise (ε=1.0)**: Protects numeric values while maintaining statistical shape.
    - **Smart Type Preservation**: Detects Integers vs Floats to prevent "19.21 year old" artifacts.
 
