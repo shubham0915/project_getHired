@@ -1,0 +1,104 @@
+Sharing data that may contain PII? Here's a case-study on how to use a task-specific SLM to remove sensitive info locally and preserve user privacy
+Tutorial | Guide
+When sharing user data that may contain Personally Identifiable Information, anonymization is a crucial step in ensuring user privacy. PII removal APIs exist, but they often defeat the purpose of anonymization, since data must be sent to third-party servers.
+
+Read this case-study to find out how to use the Artifex library to create a task-specific Small Language Model to anonymize data on your local machine, without sending it to third-party APIs.
+
+https://tanaos.com/blog/anonymize-text-locally/
+
+TL;DR
+Too busy to read the case study? Here's the code-only version:
+
+pip install artifex
+
+from artifex import Artifex
+
+ta = Artifex().text_anonymization
+
+print(ta("John Doe lives at 123 Main St, New York. His phone number is (555) 123-4567."))
+# >>> ["[MASKED] lives at [MASKED]. His phone number is [MASKED]."]
+
+Upvote
+2
+
+Downvote
+
+5
+Go to comments
+
+
+Share
+Join the conversation
+Sort by:
+
+Best
+
+Search Comments
+Expand comment search
+Comments Section
+u/-Cubie- avatar
+-Cubie-
+•
+4mo ago
+Does this perform a bit like GLiNER?
+
+
+
+Upvote
+1
+
+Downvote
+
+Reply
+
+Award
+
+Share
+
+Ok_Hold_5385
+OP
+•
+4mo ago
+I'm not very familiar with GLiNER, but I would say GLiNER is more of a general-purpse NER model, while this was specifically developed with text anonymization in mind.
+
+
+
+Upvote
+1
+
+Downvote
+
+Reply
+
+Award
+
+Share
+
+u/-Cubie- avatar
+-Cubie-
+•
+4mo ago
+Makes sense. The GLiNER architecture has been nicely used for PII before, and I was wondering if the architecture or performance was similar. See e.g.:.
+
+https://huggingface.co/urchade/gliner_multi_pii-v1
+
+https://huggingface.co/nvidia/gliner-PII
+
+
+Upvote
+1
+
+Downvote
+
+Reply
+
+Award
+
+Share
+
+
+1 more reply
+Kind-Cattle-118
+•
+4mo ago
+Pretty similar concept but GLiNER is more for general NER while this seems more focused on just PII scrubbing specifically

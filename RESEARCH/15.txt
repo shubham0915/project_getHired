@@ -1,0 +1,66 @@
+PII redaction thresholds: how do you avoid turning your data into garbage?
+I’m working on wiring PII/PHI/secrets detection into an agentic pipeline and I’m stuck on classifying low confidence hits in unstructured data.
+
+High confidence is easy: Redact it -> Done (duh)
+
+The problem is the low confidence classifications: think "3% confidence this string contains PII".
+
+Stuff like random IDs that look like phone numbers, usernames that look like emails, names in clear-text, tickets with pasted logs, SSNs w/ odd formatting, etc. If I redact anything above 0%, the data turns into garbage and users route around the process. If I redact lightly, I’m betting I never miss, which is just begging for a lawsuit.
+
+For people who have built something similar, what do you actually do with the low-confidence classifications?
+
+Do you redact anyway, send it to review, sample and audit, something else?
+
+Also, do you treat sources differently? Logs vs. support tickets vs. chat transcripts feel like totally different worlds, but I’m trying not to build a complex security policy matrix that nobody understands or maintains...
+
+If you have a setup that works, I’d love some details:
+
+What "detection stack" are you using (rules/validators, DLP, open source libs (Spacy), LLM-based, hybrid)?
+
+What tools do you use to monitor the system so you notice drift before it becomes an incident?
+
+If you have a default starting threshold, what it is? Why?
+
+Read more
+4
+·
+5
+Comments Section
+Glad_Appearance_8190
+•
+4mo ago
+This is one of those problems where the math answer and the operational answer are different. What I have seen work better than a single threshold is treating low confidence hits as a routing problem, not a redaction problem. High confidence gets auto redacted, low confidence gets tagged and handled differently depending on where it shows up in the workflow. Logs, tickets, and chats really do behave differently in practice, even if the policy doc pretends they do not.
+
+Most teams I have sat with end up using a hybrid stack. Deterministic patterns and validators first, then probabilistic or LLM based detection on what is left. Low confidence findings usually go to sampling, delayed review, or restricted access rather than immediate redaction. The key thing is visibility. You want to know how often low confidence hits later turn out to be real so you can adjust before it becomes an incident. Trying to solve this with a single magic threshold almost always turns into either garbage data or false confidence.
+
+
+2
+u/SpiritedChoice3706 avatar
+SpiritedChoice3706
+•
+4mo ago
+Great answer, I have had colleagues who have employed something similar. I have seen folks just filter out responses with lower confidence, and that has caused data distribution issues, which is definitely something to avoid.
+
+1
+[deleted]
+•
+4mo ago
+Comment removed by moderator
+
+
+2
+Strong_Worker4090
+OP
+•
+4mo ago
+Ok this makes sense. Treating low-confidence as “needs context” seems like the right mental model.
+
+A couple Qs:
+
+What do you call “borderline” in practice? Like what confidence band gets the LLM pass?
+
+How do you keep the review queue from turning into a second full-time job? Only SSN/CC/PHI types + caps?
+
+What do you do once it's been reviewed? Do you use it as training data? (aka, why review?)
+
+I’m probably going to do exactly what you said: source buckets (logs/tickets/chats), validators first, and only escalate the risky patterns.

@@ -1,0 +1,390 @@
+deidentification - A Python tool for removing personal information from text using NLP
+Showcase
+I'm excited to share a tool I created for automatically identifying and removing personal information from text documents using Natural Language Processing. It is both a CLI tool and an API.
+
+https://github.com/jftuga/deidentification
+
+https://pypi.org/project/text-deidentification
+
+What my project does:
+
+Identifies and replaces person names using spaCy's transformer model
+
+Converts gender-specific pronouns to neutral alternatives
+
+Handles possessives and hyphenated names
+
+Offers HTML output with color-coded replacements
+
+Target Audience:
+
+This is aimed at production use.
+
+Comparison:
+
+I have not found another open-source tool that performs the same task. If you happen to know of one, please share it.
+
+Technical highlights:
+
+Uses spaCy's transformer model for accurate Named Entity Recognition
+
+Handles Unicode variants and mixed encodings intelligently
+
+Caches metadata for quick reprocessing
+
+Here's a quick example:
+
+Input: John Smith's report was excellent. He clearly understands the topic.
+Output: [PERSON]'s report was excellent. HE/SHE clearly understands the topic.
+This was a fun project to work on - especially solving the challenge of maintaining correct character positions during replacements. The backwards processing approach was a neat solution to avoid recalculating positions after each replacement.
+
+Check out the deidentification GitHub repo for more details and examples. I also wrote a blog post which goes into more details. I'd love to hear your thoughts and suggestions.
+
+Note: The transformer model is ~500MB but provides superior accuracy compared to smaller models.
+
+Archived post. New comments cannot be posted and votes cannot be cast.
+
+Upvote
+164
+
+Downvote
+
+20
+Go to comments
+
+
+Share
+Sort by:
+
+Best
+
+Search Comments
+Expand comment search
+Comments Section
+call_me_cookie
+•
+1y ago
+Refreshing to see any kind of data processing project which isn't just "it uploads your data to an LLM and does a prompt on it."
+
+Really enjoyed working with spaCy back when I was involved in NLP projects. This looks like a nice project!
+
+
+
+Upvote
+39
+
+Downvote
+
+Award
+
+Share
+
+u/AnythingApplied avatar
+AnythingApplied
+•
+1y ago
+Just last week, I saw this article posted to medium: Has LLM killed traditional NLP? archive link. Their conclusion was NLPs still have a number of advantages, cost/hardware to run, no hallucinations, and better privacy (at least if you're using cloud-based LLMs), though they saw some interesting applications for combining LLMs with NLPs like using an LLM as a fallback.
+
+Especially for the OP's project NLPs really seems like the right choice as its a task NLPs are well suited for and you certainly wouldn't want to use anything cloud-based for something this privacy focused.
+
+
+
+Upvote
+11
+
+Downvote
+
+Award
+
+Share
+
+call_me_cookie
+•
+1y ago
+Quite agree. There are definitely many interesting places Generative models like LLMs can have a positive impact on NLP workloads, but for stuff like this which is barely even all that fuzzy, libraries like spaCy, which has been around for years and offers great performance and an intuitive API, are always gonna be a better option.
+
+
+Upvote
+3
+
+Downvote
+
+Award
+
+Share
+
+nicholashairs
+•
+1y ago
+Profile Badge for the Achievement Top 1% Commenter Top 1% Commenter
+One quick comment: grammatically speaking THEY is a perfectly acceptable gender neutral singular. It also makes things much easier to read especially when reading aloud (opposed to saying "he slash she" every time, which is 3 times as many words).
+
+Overall keen to take it for a spin at some point.
+
+
+
+Upvote
+17
+
+Downvote
+
+Award
+
+Share
+
+u/informatician avatar
+informatician
+•
+1y ago
+That caught my attention as well, but then I realized changing to THEY would require changing the subject-verb agreement of "understands" to "understand". Surely possible with this NLP pipeline but that would alter the source text more than needed.
+
+
+
+Upvote
+11
+
+Downvote
+
+Award
+
+Share
+
+jftuga
+OP
+•
+1y ago
+•
+Edited 1y ago
+I agree with your assessment.
+
+If someone wants to change the substitutions, then HE/SHE 😄 can update the GENDER_PRONOUNS dictionary
+
+
+Upvote
+6
+
+Downvote
+
+Award
+
+Share
+
+nicholashairs
+•
+1y ago
+Profile Badge for the Achievement Top 1% Commenter Top 1% Commenter
+Ah you are indeed correct.
+
+
+Upvote
+4
+
+Downvote
+
+Award
+
+Share
+
+MisterMassaker
+•
+1y ago
+A different open-source tool would be presidio
+
+Check it out!
+
+
+
+Upvote
+7
+
+Downvote
+
+Award
+
+Share
+
+u/Sufficient_Horse2091 avatar
+Sufficient_Horse2091
+•
+1y ago
+You can also try Protecto, which is one of the best de-identification tool for PII/PHI
+
+
+Upvote
+1
+
+Downvote
+
+Award
+
+Share
+
+u/adam-moss avatar
+adam-moss
+•
+1y ago
+Another open source would be arx deidentifier
+
+https://arx.deidentifier.org/
+
+
+Upvote
+4
+
+Downvote
+
+Award
+
+Share
+
+u/Just_Fox7912 avatar
+Just_Fox7912
+•
+1y ago
+Very nice! bookmarked this for my project. I am building a mobile voip app for myself that records, transcribes and summarizes my cold-calls for note taking and such. For privacy reasons I need to only have the personal info available locally.
+
+
+Upvote
+2
+
+Downvote
+
+Award
+
+Share
+
+Wistephens
+•
+1y ago
+I’ve been testing Microsoft Presidio for healthcare text de-identification. It’s under the MIT license. https://github.com/microsoft/presidio
+
+
+Upvote
+2
+
+Downvote
+
+Award
+
+Share
+
+bupr0pion
+•
+1y ago
+How does yours perform against the Stanford one?
+
+
+
+Upvote
+1
+
+Downvote
+
+Award
+
+Share
+
+jftuga
+OP
+•
+1y ago
+The accuracy of the en_core_web_trf for Named Entity Recognition is 90%.
+
+My code base might perform slightly better than this, because I replace entities and then re-scan the text until no more entities are found. On occasion, this will find entities not found during the first pass.
+
+Can you please send me a link to the Stanford one? I'd like to learn more about it.
+
+
+
+Upvote
+2
+
+Downvote
+
+Award
+
+Share
+
+bupr0pion
+•
+1y ago
+https://huggingface.co/StanfordAIMI/stanford-deidentifier-base
+
+This was created for healthcare data in mind. Can your model detect non english names? i.e Chinese names that are written in chinese.
+
+
+Upvote
+2
+
+Downvote
+
+Award
+
+Share
+
+
+1 more reply
+u/Any-Growth-7790 avatar
+Any-Growth-7790
+•
+1y ago
+Great job. I used SpaCy NER to deidentify docs in public service 4-5 years ago. Surprised you can't find anything else out there, fairly easy bit of code to put together.
+
+
+Upvote
+1
+
+Downvote
+
+Award
+
+Share
+
+u/Munzu avatar
+Munzu
+•
+1y ago
+I'm curious if you've done any analysis on the performance on more uncommon names from other cultures.
+
+
+Upvote
+1
+
+Downvote
+
+Award
+
+Share
+
+GeorgiaWitness1
+•
+1y ago
+•
+Edited 1y ago
+AMAZING!
+
+I was in the process of doing this with reasoning models, i will take a look of what you did!
+
+Update: Hey OP, i think i will do something more complex, a small deepseek model locally that interacts with presidio to do this, for several languages and so on.
+
+
+Upvote
+1
+
+Downvote
+
+Award
+
+Share
+
+u/Sufficient_Horse2091 avatar
+Sufficient_Horse2091
+•
+1y ago
+Great work on building this de-identification tool! NLP-based anonymization is a crucial area, and it's great to see open-source contributions tackling this challenge.
+
+If you're exploring other approaches, you might want to check out Protecto—it takes de-identification a step further by using a combination of spaCy, Gliner, and Flair for Named Entity Recognition, significantly improving accuracy and recall.
+
+Protecto is designed for high-volume, production-grade data masking with context-aware replacements, ensuring minimal impact on downstream AI models.
+
+Would love to hear your thoughts on how Protecto compares! Have you tried combining multiple NER models to boost accuracy?

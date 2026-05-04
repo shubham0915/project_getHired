@@ -1,139 +1,112 @@
+"""
+Masking Engine — Backward-Compatible Wrapper
+
+This module wraps the new multi-layer pipeline (core/pipeline.py) while
+maintaining the same API that app.py expects.
+
+DEPRECATED: Direct use of this module is deprecated.
+Use `from core.pipeline import MaskingPipeline` instead.
+"""
+
 import pandas as pd
 import numpy as np
-from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern
-from presidio_anonymizer import AnonymizerEngine
-from presidio_anonymizer.entities import OperatorConfig
-from faker import Faker
-import pyffx
 import logging
-import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-fake = Faker('en_IN')
 
-# FPE Setup
-# For Aadhaar (12 digits), we use Integer FPE with an alphabet of '0123456789'
-fpe_aadhaar = pyffx.String(b'blostem-secret-key', alphabet='0123456789', length=12)
-# For PAN (10 chars: 5 letters, 4 numbers, 1 letter), pyffx doesn't easily support mixed format out of the box in one pass.
-# Wait, pyffx string supports a custom alphabet. PAN has uppercase letters and numbers.
-# We can just use String with alphabet of uppercase letters + numbers, length 10.
-pan_alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-fpe_pan = pyffx.String(b'blostem-secret-key', alphabet=pan_alphabet, length=10)
-
-def fpe_encrypt_pan(pan: str) -> str:
-    if pd.isna(pan) or len(str(pan)) != 10: return pan
-    return fpe_pan.encrypt(str(pan))
-
-def fpe_encrypt_aadhaar(aadhaar: str) -> str:
-    if pd.isna(aadhaar) or len(str(aadhaar)) != 12: return aadhaar
-    return fpe_aadhaar.encrypt(str(aadhaar))
-
-# Initialize engines
-analyzer = AnalyzerEngine()
-anonymizer = AnonymizerEngine()
-
-# Custom Recognizers for India
-pan_pattern = Pattern(name="pan_pattern", regex=r"[A-Z]{5}[0-9]{4}[A-Z]{1}", score=0.9)
-pan_recognizer = PatternRecognizer(supported_entity="IN_PAN", patterns=[pan_pattern])
-analyzer.registry.add_recognizer(pan_recognizer)
-
-aadhaar_pattern = Pattern(name="aadhaar_pattern", regex=r"\b\d{12}\b", score=0.8)
-aadhaar_recognizer = PatternRecognizer(supported_entity="IN_AADHAAR", patterns=[aadhaar_pattern])
-analyzer.registry.add_recognizer(aadhaar_recognizer)
-
-# Custom operators for faker substitution
-def fake_name(_): return fake.name()
-def fake_phone(_): return fake.phone_number()
-def fake_email(_): return fake.email()
-def fake_pan(text): return fpe_encrypt_pan(text)
-def fake_aadhaar(text): return fpe_encrypt_aadhaar(text)
-
-# Mapping Presidio entities to our Faker functions
-operators = {
-    "PERSON": OperatorConfig("custom", {"lambda": fake_name}),
-    "PHONE_NUMBER": OperatorConfig("custom", {"lambda": fake_phone}),
-    "EMAIL_ADDRESS": OperatorConfig("custom", {"lambda": fake_email}),
-    "IN_PAN": OperatorConfig("custom", {"lambda": fake_pan}),
-    "IN_AADHAAR": OperatorConfig("custom", {"lambda": fake_aadhaar}),
-    "DEFAULT": OperatorConfig("replace", {"new_value": "<REDACTED>"})
-}
-
-def mask_text(text: str) -> str:
-    if pd.isna(text) or not isinstance(text, str):
-        return text
-        
-    results = analyzer.analyze(text=text, entities=["PERSON", "PHONE_NUMBER", "EMAIL_ADDRESS", "IN_PAN", "IN_AADHAAR"], language='en')
+def process_dataframe(df: pd.DataFrame, enable_ner: bool = True) -> pd.DataFrame:
+    """
+    Process a DataFrame through the multi-layer masking pipeline.
     
-    if not results:
-        return text
+    This wrapper maintains backward compatibility with app.py by returning
+    only the masked DataFrame. The PII Manifest is stored as an attribute
+    on the returned DataFrame for optional access.
+    
+    Args:
+        df: Raw DataFrame with potential PII
+        enable_ner: Whether to enable GLiNER NER (Layer 2).
+                    Set to False for faster processing on structured-only data.
         
-    anonymized_result = anonymizer.anonymize(
-        text=text,
-        analyzer_results=results,
-        operators=operators
-    )
-    return anonymized_result.text
+    Returns:
+        Masked DataFrame (with manifest attached as df.attrs['pii_manifest'])
+    """
+    try:
+        from core.pipeline import MaskingPipeline
+        pipeline = MaskingPipeline(enable_ner=enable_ner)
+        masked_df, manifest = pipeline.process(df)
+        
+        # Attach manifest to DataFrame for optional access
+        masked_df.attrs['pii_manifest'] = manifest.to_safe_dict()
+        masked_df.attrs['pii_manifest_obj'] = manifest
+        
+        return masked_df
+        
+    except Exception as e:
+        logger.error(f"Pipeline failed: {e}")
+        logger.info("Falling back to basic column-name masking...")
+        return _fallback_masking(df)
 
-def add_laplace_noise(series: pd.Series, epsilon: float = 1.0, sensitivity: float = 1000.0) -> pd.Series:
-    """Adds Laplace noise for Differential Privacy."""
-    scale = sensitivity / epsilon
-    noise = np.random.laplace(0, scale, len(series))
-    noisy_series = series + noise
-    return noisy_series.round(2).clip(lower=0) # ensure positive amounts
 
-def generalize_age(age: int) -> str:
-    if pd.isna(age): return age
-    age = int(age)
-    if age < 25: return "18-25"
-    elif age < 35: return "26-35"
-    elif age < 50: return "36-50"
-    elif age < 65: return "51-65"
-    else: return "65+"
-
-def generalize_pincode(pincode: str) -> str:
-    if pd.isna(pincode): return pincode
-    return str(pincode)[:3] + "XXX"
-
-def process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+def _fallback_masking(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Minimal fallback masking if the new pipeline fails.
+    Uses basic Faker substitution on known column names.
+    """
+    from faker import Faker
+    import random
+    import string
+    
+    fake = Faker('en_IN')
     masked_df = df.copy()
     
-    logger.info("Starting masking process...")
-    
-    # 1. Direct PII Masking (FPE for PAN/Aadhaar)
+    # Simple column-name-based masking
+    if 'Name' in masked_df.columns:
+        masked_df['Name'] = masked_df['Name'].apply(lambda x: fake.name() if pd.notna(x) else x)
+    if 'Phone_Number' in masked_df.columns:
+        masked_df['Phone_Number'] = masked_df['Phone_Number'].apply(lambda x: fake.phone_number() if pd.notna(x) else x)
+    if 'Email' in masked_df.columns:
+        masked_df['Email'] = masked_df['Email'].apply(lambda x: fake.email() if pd.notna(x) else x)
     if 'PAN_Number' in masked_df.columns:
-        masked_df['PAN_Number'] = masked_df['PAN_Number'].apply(fpe_encrypt_pan)
+        masked_df['PAN_Number'] = masked_df['PAN_Number'].apply(
+            lambda x: f"{''.join(random.choices(string.ascii_uppercase, k=5))}{random.randint(1000,9999)}{random.choice(string.ascii_uppercase)}" if pd.notna(x) else x
+        )
     if 'Aadhaar_Number' in masked_df.columns:
-        masked_df['Aadhaar_Number'] = masked_df['Aadhaar_Number'].apply(fpe_encrypt_aadhaar)
-    
+        masked_df['Aadhaar_Number'] = masked_df['Aadhaar_Number'].apply(
+            lambda x: ''.join(random.choices(string.digits, k=12)) if pd.notna(x) else x
+        )
     if 'Account_Number' in masked_df.columns:
-        # FPE or Hash
-        masked_df['Account_Number'] = masked_df['Account_Number'].apply(lambda x: hash(str(x)) % 10**10 if pd.notna(x) else x)
-
-    # 2. Text Masking for PII embedded in comments/names/emails
-    text_columns = ['Name', 'Phone_Number', 'Email', 'Comments']
-    for col in text_columns:
-        if col in masked_df.columns:
-            logger.info(f"Masking column: {col}")
-            masked_df[col] = masked_df[col].apply(mask_text)
-            
-    # 3. Generalization for Quasi-Identifiers (K-Anonymity)
+        masked_df['Account_Number'] = masked_df['Account_Number'].apply(
+            lambda x: ''.join(random.choices(string.digits, k=len(str(x)))) if pd.notna(x) else x
+        )
     if 'Age' in masked_df.columns:
-        masked_df['Age'] = masked_df['Age'].apply(generalize_age)
+        masked_df['Age'] = masked_df['Age'].apply(lambda x: "26-35" if pd.notna(x) else x)
     if 'Pincode' in masked_df.columns:
-        masked_df['Pincode'] = masked_df['Pincode'].apply(generalize_pincode)
-
-    # 4. Differential Privacy for Financial Amounts
+        masked_df['Pincode'] = masked_df['Pincode'].apply(
+            lambda x: str(x)[:3] + "XXX" if pd.notna(x) else x
+        )
     if 'Amount' in masked_df.columns:
-        logger.info("Applying Laplace noise to Amount to ensure DP")
-        masked_df['Amount'] = add_laplace_noise(masked_df['Amount'], epsilon=1.0, sensitivity=1000.0)
-
-    logger.info("Masking complete.")
+        noise = np.random.laplace(0, 1000, len(masked_df))
+        masked_df['Amount'] = (masked_df['Amount'] + noise).round(2).clip(lower=0)
+    
     return masked_df
+
 
 if __name__ == "__main__":
     df = pd.read_csv("raw_fintech_data.csv")
-    masked_df = process_dataframe(df)
+    masked_df = process_dataframe(df, enable_ner=False)  # Start without NER for speed
     masked_df.to_csv("masked_fintech_data.csv", index=False)
-    print("Saved masked_fintech_data.csv")
+    
+    # Print manifest summary if available
+    if 'pii_manifest' in masked_df.attrs:
+        import json
+        manifest = masked_df.attrs['pii_manifest']
+        print("\n=== PII MANIFEST SUMMARY ===")
+        print(f"Total PII Detected: {manifest.get('total_pii_detected', 0)}")
+        print(f"Detection by Type: {json.dumps(manifest.get('detection_by_type', {}), indent=2)}")
+        print(f"Detection by Severity: {json.dumps(manifest.get('detection_by_severity', {}), indent=2)}")
+        print(f"Validation Clean: {manifest.get('final_clean', False)}")
+        print(f"Processing Time: {manifest.get('processing_time_seconds', 0)}s")
+    
+    print("\nSaved masked_fintech_data.csv")

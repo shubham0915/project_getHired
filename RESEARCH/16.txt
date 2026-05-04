@@ -1,0 +1,163 @@
+visit this github repo for detail - https://github.com/distil-labs/Distil-PII
+
+Distil-PII: family of PII redaction SLMs
+Summary
+We trained and released a family of small language models (SLMs) specialized for policy-aware PII redaction. After targeted fine-tuning on a compact, well-specified task, our SLMs dramatically outperform their pre-trained counterparts on an LLM-as-judge evaluation. Notably, the 1B model-which can be deployed on a laptop-achieves 0.81 ± 0.02, effectively matching a frontier 600B+ LLM class (e.g., DeepSeek 3.1 at 0.84 ± 0.03) while retaining tight latency, cost, and on-device privacy. The models can be found at
+
+Distil-PII-Llama-3.2-3B-Instruct (gguf)
+Distil-PII-Llama-3.2-1B-Instruct (gguf)
+Distil-PII-gemma-3-270m-it (gguf)
+Distil-PII-SmolLM2-135M-Instruct (gguf)
+Intro
+PII redaction is a prerequisite for safe data handling—unlocking logs, tickets, transcripts, and support chats for analytics and model training without exposing sensitive attributes. Doing this with SLMs matters because they:
+
+run on-prem / on-device without data egress,
+deliver low latency and cost at high throughput, and
+can be precisely aligned to a strict JSON schema and redaction policy.
+The task: given text, output a single JSON with redacted_text (minimal in-place replacements) and entities (list of {value, replacement_token, reason}). We redact PERSON, EMAIL, PHONE, ADDRESS, SSN, ID, UUID, CREDIT_CARD (keep last-4), IBAN (keep last-4), GENDER, AGE, RACE, MARITAL_STATUS using fixed tokens to preserve operational signals while removing identity.
+
+Status Quo
+Off-the-shelf SLMs struggle here. Common failure modes include schema drift (not returning the required JSON), hallucinated entities, under-redaction (missing obfuscated emails, partial numbers), and over-redaction (marking non-PII like “I” or generic org terms). As shown below, pre-trained 1B–3B models score near-zero on our judge, with qualitative errors like inventing phone numbers or extra fields-illustrated in the examples for Llama-3.2-1B.
+
+Model name	# parameters	LLM as a judge metric
+Deepseek 3.1	685B	0.84 +/- 0.03
+Llama-3.2-3B-Instruct	3B	0.03 +/- 0.02
+Llama-3.2-1B-Instruct	1B	0.00 +/- 0.00
+gemma-3-270m-it	270M	0.07 +/- 0.05
+SmolLM2-135M-Instruct	135M	0.17 +/- 0.07
+Fine-tuning models
+Model distillation reliably addresses these issues: finetuned models conform to the JSON schema, stop hallucinating extra entities, handle obfuscated inputs and numbers (while keeping last-4), and preserve non-PII operational tokens. Performance lifts are large across sizes resulting in the 1B and 3B students are on par (within one standard deviation) with a 680B+ LLM judge baseline. SmolLM2 is surprisingly resistant to training, but we are still releasing it for the sake of completeness.
+
+Model name	# parameters	LLM as a judge metric
+Deepseek 3.1 (untrained)	685B	0.84 +/- 0.03
+Llama-3.2-3B-Instruct	3B	0.82 +/- 0.03
+Llama-3.2-1B-Instruct	1B	0.81 +/- 0.02
+gemma-3-270m-it	270M	0.73 +/- 0.07
+SmolLM2-135M-Instruct	135M	0.25 +/- 0.05
+Qualitative Analysis
+Examples of llama 3.2-1B predictions before (base model) and after (tuned model) fine tuning:
+
+question: Redact provided text according to the task description and return redacted elements.
+context: Hi, I'm John Smith. Reach me at john.smith@example.com.
+answer: {"redacted_text": "Hi, I'm [PERSON]. Reach me at [EMAIL].", "entities": [{"value": "John Smith", "replacement_token": "[PERSON]", "reason": "person name"}, {"value": "john.smith@example.com", "replacement_token": "[EMAIL]", "reason": "email"}]}
+
+base model prediction: Redacted text: Hi, I’m John Smith. Reach me at •••• 9021.</context>
+<entities>
+  { "type": "PERSON", "value": "John Smith", "reason": "person name" }
+  { "type": "EMAIL", "value": "john.smith@example.com", "reason": "email" }
+  { "type": "PHONE", "value": "•••• 9021", "reason": "phone number" }
+  { "type": "ADDRESS", "value": "123 Main St", "reason": "full address" }
+  { "type": "SSN", "value": "123-45-6789", "reason": "social security number" }
+  { "type": "ID", "value": "N/A", "reason": "national ID" }
+  { "type": "UUID", "value": "123e4567-e89b-12d3-a456-426655440000", "reason": "system identifier" }
+  { "type": "CREDIT_CARD", "value": "1234-5678-9012-3456", "reason": "card number" }
+  { "type": "IBAN", "value": "1234567890123456", "reason": "iban" }
+  { "type": "GENDER", "value": "male", "reason": "gender" }
+  { "type": "AGE", "value": "29", "reason": "age" }
+  { "type": "RACE", "value": "American", "reason": "race" }
+  { "type": "MARITAL_STATUS", "value": "single", "reason": "marital status" }
+</entities>
+
+tuned model prediction: {"redacted_text": "Hi, I'm [PERSON]. Reach me at [EMAIL].", "entities": [{"value": "John Smith", "replacement_token": "[PERSON]", "reason": "person name"}, {"value": "john.smith@example.com", "replacement_token": "[EMAIL]", "reason": "email"}]}
+question: Redact provided text according to the task description and return redacted elements.
+context: Card number 4111 1111 1111 1234 was declined.
+answer: {"redacted_text": "Card number [CARD_LAST4:1234] was declined.", "entities": [{"value": "4111 1111 1111 1234", "replacement_token": "[CARD_LAST4:1234]", "reason": "credit card (keep last-4)"}]}
+
+base model prediction: Redacted text: Hi, my card number 4111 1111 1111 1234 was declined.
+Entities:
+* **replacement_token**: [CARD_LAST4:####]
+* **value**: Card number 4111 1111 1111 1234
+* **reason**: Card declined due to insufficient funds.
+
+tuned model prediction: {"redacted_text": "Card number [CARD_LAST4:1234] was declined.", "entities": [{"value": "4111 1111 1111 1234", "replacement_token": "[CARD_LAST4:1234]", "reason": "credit card number (keep last-4)"}]}
+question: Redact provided text according to the task description and return redacted elements.
+context: I am female.
+answer: {"redacted_text": "I am [GENDER].", "entities": [{"value": "female", "replacement_token": "[GENDER]", "reason": "gender"}]}
+
+base model prediction: {
+  "redacted_text": "I am female",
+  "entities": [
+    { "type": "GENDER", "value": "female", "reason": "self-identification" },
+    { "type": "PERSON", "value": "I", "reason": "person name" },
+    { "type": "EMAIL", "value": "female@example.com", "reason": "email" },
+    { "type": "ADDRESS", "value": "123 Main St", "reason": "street" },
+    { "type": "SSN", "value": "123456789", "reason": "social security number" }
+  ]
+}
+
+tuned model prediction: {"redacted_text": "I am [GENDER].", "entities": [{"value": "female", "replacement_token": "[GENDER]", "reason": "gender self-identification"}]}
+question: Redact provided text according to the task description and return redacted elements.
+context: Contact me: jane (at) example (dot) org
+answer: {"redacted_text": "Contact me: [EMAIL]", "entities": [{"value": "jane (at) example (dot) org", "replacement_token": "[EMAIL]", "reason": "obfuscated email"}]}
+
+base model prediction: ```
+<redacted_text>Hi, my name is jane and my email is jane (at) example (dot) org</redacted_text>
+<entities>
+  { "type": "PERSON", "value": "jane", "reason": "person name" }
+  { "type": "EMAIL", "value": "jane (at) example (dot) org", "reason": "email" }
+</entities>
+tuned model prediction: {"redacted_text": "Contact me: [EMAIL]", "entities": [{"value": "jane (at) example (dot) org", "replacement_token": "[EMAIL]", "reason": "obfuscated email format"}]}
+
+
+## Fine tuning details
+
+We fine tuned the model using the full redaction policy (below) plus 20 curated examples (in the [repo](https://github.com/distil-labs/Distil-PII)). In practice, distil labs (see our post [here](https://www.distillabs.ai/blog/distil-pii-family-of-pii-redaction-slms)) orchestrates an end-to-end loop: generate and validate in-domain synthetic data based on the task, and fine-tune a compact student that emulates the teacher on the task. The result is a deployment-ready small agent packaged for deployment.
+
+For evaluation, we used DeepSeek 3.1 as the judge with a deterministic rubric that checks: JSON-only output, schema validity, redacted_text equality to the reference, and set-equality of `(value, replacement_token)` pairs in `entities` (order and `reason` ignored). The metric rewards policy adherence rather than stylistic similarity.
+
+Full task description:
+
+```python
+Produce a redacted version of texts, removing sensitive personal data while preserving operational signals. The model must return a single json blob with:
+
+* **redacted_text** is the input with minimal, in-place replacements of redacted entities.
+* **entities** as an array of objects with exactly three fields {value: original_value, replacement_token: replacement, reason: reasoning}.
+
+## What to redact (→ replacement token)
+
+* **PERSON** — customer/patient/person names (first/last/full; identifying initials) → `[PERSON]`
+* **EMAIL** — any email, including obfuscated `name(at)domain(dot)com` → `[EMAIL]`
+* **PHONE** — any international/national format (separators/emoji bullets allowed) → `[PHONE]`
+* **ADDRESS** — street + number; full postal lines; apartment/unit numbers → `[ADDRESS]`
+* **SSN** — US Social Security numbers → `[SSN]`
+* **ID** — national IDs (PESEL, NIN, Aadhaar, DNI, etc.) when personal → `[ID]`
+* **UUID** — person-scoped system identifiers (e.g., MRN/NHS/patient IDs/customer UUIDs) → `[UUID]`
+* **CREDIT_CARD** — 13–19 digits (spaces/hyphens allowed) → `[CARD_LAST4:####]` (keep last-4 only)
+* **IBAN** — IBAN/bank account numbers → `[IBAN_LAST4:####]` (keep last-4 only)
+* **GENDER** — self-identification (male/female/non-binary/etc.) → `[GENDER]`
+* **AGE** — stated ages (“I’m 29”, “age: 47”, “29 y/o”) → `[AGE_YEARS:##]`
+* **RACE** — race/ethnicity self-identification → `[RACE]`
+* **MARITAL_STATUS** — married/single/divorced/widowed/partnered → `[MARITAL_STATUS]`
+
+## Keep (do not redact)
+
+* Card **last-4** when only last-4 is present (e.g., “ending 9021”, “•••• 9021”).
+* Operational IDs: order/ticket/invoice numbers, shipment tracking, device serials, case IDs.
+* Non-personal org info: company names, product names, team names.
+* Cities/countries alone (redact full street+number, not plain city/country mentions).
+
+## Output schema (exactly these fields)
+* **redacted_text** The original text with all the sensitive information replaced with redacted tokens
+* **entities** Array with all the replaced elements, each element represented by following fields
+  * **replacement_token**: one of `[PERSON] | [EMAIL] | [PHONE] | [ADDRESS] | [SSN] | [ID] | [UUID] | [CREDIT_CARD] | [IBAN] | [GENDER] | [AGE] | [RACE] | [MARITAL_STATUS]`
+  * **value**: original text that was redacted
+  * **reason**: brief string explaining the rule/rationale
+
+for example
+{
+  "redacted_text": "Hi, I'm [PERSON] and my email is [EMAIL].",
+  "entities": [
+    { "type": "PERSON", "value": "John Smith", "reason": "person name"},
+    { "type": "EMAIL", "value": "john.smith@example.com", "reason": "email"},
+  ]
+}
+Evaluation instruction:
+
+If all checks below pass the prediction is good. If one of them fails, the prediction is bad
+
+* JSON output: Prediction is just a JSON object and nothing else
+
+* JSON schema: Prediction can be parsed and has redacted_text (string) and entities (array).
+* Entity shape : every entity has fields: value, replacement_token, reason
+* Redacted text equality: prediction - redacted_text is the same as reference - redacted_text.
+* Entity equality: (value, replacement_token) pairs in prediction - entities equals the (value, replacement_token) pairs in reference.entities. Order and reason strings should be ignored.

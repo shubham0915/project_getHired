@@ -1,10 +1,24 @@
-presidio-analyzer
-presidio-anonymizer
-faker
-pandas
-streamlit
-spacy
-sdv
-pyffx
-matplotlib
-seaborn
+# Core Pipeline
+pandas>=2.0
+numpy>=1.24
+pydantic>=2.0
+pyyaml>=6.0
+faker>=20.0
+
+# Layer 2: GLiNER NER (optional — pipeline works without it)
+gliner>=0.2.5
+
+# Synthetic Data & Utility
+sdv>=1.0
+scipy>=1.10
+
+# UI
+streamlit>=1.30
+matplotlib>=3.7
+seaborn>=0.12
+
+# Legacy (kept for backward compat, will be removed)
+# presidio-analyzer
+# presidio-anonymizer
+# pyffx
+# spacy
