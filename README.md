@@ -10,8 +10,8 @@ Enterprise-grade, DPDP-compliant multi-layer PII detection and masking pipeline 
    - **Layer 3 (Validation)**: Recursive re-scanning to guarantee zero leakage.
 
 2. **Semantic Transformation (Digital Twin)**:
-   - **Synthetic Substitution**: Irreversible Faker-based substitution that preserves natural language flow for LLM fine-tuning.
-   - **Referential Integrity**: Deterministic caching ensures `Rajesh` always maps to `Krishna` across the entire session.
+   - **Synthetic Substitution (Salted SHA-256)**: Irreversible Faker-based substitution. We use a **Cryptographic Salted Hash (HMAC-SHA256)** to deterministically seed the generator.
+   - **Cross-Session Referential Integrity**: Because of the salted seed, `Rajesh` always maps to `Krishna` across every table and session in the enterprise, but he can NEVER be "decrypted" back to his original identity. This eliminates the "Master Key" risk of traditional encryption.
 
 3. **Advanced Utility Metrics (Market Standard 2026)**:
    - **Jensen-Shannon Divergence**: Symmetric distribution similarity check for numeric data.

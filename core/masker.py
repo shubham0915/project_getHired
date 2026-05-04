@@ -43,9 +43,20 @@ class PIIMasker:
     referential integrity across the dataset.
     """
 
-    def __init__(self):
+    def __init__(self, salt: str = "BL0STEM_HACK_2026"):
         # Session-level deterministic cache: original_value → masked_value
         self._cache: Dict[str, str] = {}
+        # Salt for cryptographic one-way seeding (Enterprise Standard)
+        self.salt = salt
+
+    def _get_seed(self, text: str) -> int:
+        """Generate a deterministic seed from text using a salted SHA-256 hash."""
+        import hashlib
+        # Salted hash ensures it's irreversible even if the mapping logic is known
+        combined = f"{self.salt}:{text.lower()}"
+        hash_hex = hashlib.sha256(combined.encode()).hexdigest()
+        # Use first 8 characters for a stable 32-bit integer seed
+        return int(hash_hex[:8], 16)
 
     def reset_cache(self):
         """Reset the deterministic mapping. Call between independent datasets."""
@@ -92,7 +103,13 @@ class PIIMasker:
         return masked
 
     def _generate(self, original: str, method: str) -> str:
-        """Route to the appropriate faker generator."""
+        """Route to the appropriate faker generator with deterministic seeding."""
+        # Seed both random and faker to ensure cross-session consistency
+        # (Gap 1: Salted Hash Alternative for Referential Integrity)
+        seed = self._get_seed(original)
+        random.seed(seed)
+        fake.seed_instance(seed)
+
         generators = {
             "pan": self._fake_pan,
             "aadhaar": self._fake_aadhaar,
