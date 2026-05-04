@@ -15,8 +15,12 @@ Enterprise-grade, DPDP-compliant multi-layer PII detection and masking pipeline 
    - **Smart Partial-Name Matching**: The engine intelligently splits full names. If "Rajesh Sharma" becomes "Krishna Choudhury", a later isolated mention of "rajesh" will automatically become "Krishna", even in reverse-order text processing!
    - **Gender-Aware Indian Names**: Heuristic gender inference ensures Indian male names map to Indian male names, and female to female.
 
-3. **Differential Privacy**:
+3. **Differential Privacy & Dynamic Type Inference**:
    - Numeric columns (like `Amount`, `Balance`) are protected using Laplace noise (ε=1.0) to prevent targeted numerical linkage attacks while preserving overall statistical distribution.
+   - **Smart Type Preservation**: The engine intelligently detects if a column contains Integers (like `Age` or `Count`) or Floats (like `Balance`). It applies the correct mathematical noise and automatically rounds back to the original datatype, so you never end up with a "19.21 year old."
+
+4. **Content-First, Schema-Agnostic Processing**:
+   - The pipeline does not blindly trust column headers. Irrelevant column names (like `col_4`) are automatically analyzed based on their content. If they contain pure numbers, they receive Differential Privacy. If they contain text, they are scanned by Regex and GLiNER to uncover hidden PII.
 
 4. **Quasi-Identifier Protection (LLM-Optimized)**:
    - `Age` is protected using Differential Privacy (Laplace noise) rounded to the nearest integer. This maintains perfect natural age distributions instead of clunky text bands.
@@ -88,6 +92,25 @@ flowchart TD
     
     H[Later Detected: 'rajesh'] --> I[Lowercase Cache Lookup]
     I --> J[Return 'Krishna' instantly]
+```
+
+### 4. Inner Workings: Differential Privacy & Dynamic Type Inference
+How the system protects numbers (like Balances and Ages) while smartly maintaining their original data types (Floats vs Integers) to avoid unrealistic data (like a 19.21 year old).
+
+```mermaid
+flowchart TD
+    A[Numeric Data Input] --> B{Data Type Check}
+    B -->|Integer e.g. Age| C[Calculate Variance Sensitivity]
+    B -->|Float e.g. Balance| D[Calculate Variance Sensitivity]
+    
+    C --> E[Apply Laplace Noise]
+    D --> F[Apply Laplace Noise]
+    
+    E --> G[Round & Convert back to Integer]
+    F --> H[Round to 2 Decimal Places]
+    
+    G --> I[Secure Output]
+    H --> I
 ```
 
 ---
