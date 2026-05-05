@@ -1,0 +1,38 @@
+Generative AI has recently emerged as a groundbreaking technology and businesses have been quick to respond. Recognizing its potential to drive innovation, deliver significant ROI and add economic value, business adoption is rapid and widespread. They are not wrong. A research report by Quantum Black, AI by McKinsey, titled "The Economic Potential of Generative AI”, estimates that generative AI could unlock up to $4.4 trillion in annual global productivity.
+
+However, GenAI usage also needs to be fair, compliant and ethical. One of the main safety concerns is about accidental leaking of PII (Personal Identifiable Information), compromising individuals’ privacy. In this post, we share the open source solution that can help identify and mask PII information: The PII Recognizer.
+
+The Challenge: Masking PII
+PII (Personally Identifiable Information) is any information that can be used to identify an individual. This could include their name, address, phone number, social security number, or credit card number. One of the challenges businesses face when implementing GenAI and training LLMs is accidental exfiltration of PII (Personal Identifiable Information). 
+
+LLMs are trained on large datasets of text and code. If this data contains PII, it becomes part of the models’ training dataset. This means it is incorporated into the models and can be used when generating future responses to any user. This could result in a data breach, the compromising of individual privacy and breaking compliance regulations, among other implications.
+
+There is also the risk of data retention. Even if the data isn't immediately shared in a response, it might be stored in the training set. Consequently, this raises concerns about the security of data storage, who has access to it and what measures are in place to prevent future exposure.
+
+For example, if an LLM is trained on a dataset of customer records, this data could be used to generate a response with the list of customers who have purchased a particular product and their personal details. This could be exploited by the product’s competitors for marketing purposes or, worse, by hackers who might use the information for social engineering.
+
+The Solution: The Open Source PII Recognizer
+The PII Recognizer is an open source function that can detect PII data in datasets and anonymize the PII entity in the text. Part of MLRun’s functions hub - a collection of open source importable functions (though it can also be used independently of MLRun), the PII Recognizer acts as a safety net for PII exposure for GenAI usage.
+
+How the PII Recognizer Works
+By adding the PII Recognizer function to your backend, it will identify which data is PII.
+You can choose what to do with the data: mask it, delete it, etc.
+Every time the function runs, it also generates a report that presents which data was detected, the confidence level of the model and which labels cover which entities.
+Once the function runs and you approve the removed PII, you can transfer the updated dataset to the LLM, PII-free.
+This entire process can be automated by MLRun. MLRun can pass the outputs and inputs to and from the PII Recognizer function and the LLMS, and also connect the entire pipeline.
+
+Under the PII Recognizer Hood
+The PII Recognizer integrates with powerful tools: Spacy, Flair, Pattern Recognizer and Microsoft's Presidio. Presidio is used as a small model registry. PII recognizers are added to the same hub registry, and they are used to recognize the PII data.
+
+The PII Recognizer is model-based and regex-based. This makes it easy for project contributors to add additional types of PII entities they want to identify, by adding additional regexes.
+
+Please note!
+
+The PII Recgonizer is only as powerful as the tools it uses, and should always be thoroughly tested before using it in production
+
+Try it Out
+If you're building an LLM app and you need to protect against PII leakage, you can check out the PII Recognizer on Github.
+
+If you'd like to play around with this function, here's a call center analysis demo built using MLRun (video walkthrough here).
+
+The PII Recognizer was contributed by Peng Wei, Guy Lecker and Yonatan Shelach.

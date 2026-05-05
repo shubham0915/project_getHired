@@ -1,0 +1,325 @@
+Text anonymization using Hugging Face transformers
+Luc CAILLIAU
+Luc CAILLIAU
+
+Follow
+6 min read
+·
+Feb 6, 2023
+20
+
+
+2
+
+
+
+Press enter or click to view image in full size
+
+Data has become the most valuable asset of large companies. In order to facilitate the manipulation of data within your company, it is important to have an effective pipeline to anonymize text in order to respect customer confidentiality.
+
+In this article, we will create an anonymization pipeline compatible with all Named Entity Recognition (NER) models based on BERT, using PyTorch, available on the Hugging Face Hub.
+
+Set up the model
+First, we need to import the necessary python packages.
+
+import torch
+from transformers import AutoTokenizer, AutoModelForTokenClassification
+from transformers.pipelines.token_classification import TokenClassificationPipeline
+Now is the time to select and download a NER model from the Hugging Face Hub. The model selected below is able to identify the person’s name (PER), organization (ORG) and location (LOC) in different languages, which can be useful if your documents are related to different entities in the world.
+
+model_checkpoint = "Davlan/bert-base-multilingual-cased-ner-hrl"
+
+tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
+model = AutoModelForTokenClassification.from_pretrained(model_checkpoint)
+Pipeline (updated)
+The sections below describe a way to handle unlimited length of text with transformers before 4.28.0. I reshaped the implementation of the pipeline to handle unlimited length of text by providing a stride number which defines the number of overlapping tokens between chunks. You can use the pipeline as below and go to the section Anonymize.
+
+pipe = TokenClassificationPipeline(model=model, tokenizer=tokenizer, aggregation_strategy="simple", stride=10)
+ents = pipe("Bernard works at BNP Paribas in Paris.")
+display(ents)
+[{'entity_group': 'PER', 
+  'score': 0.9994497,
+  'word': 'Bernard',
+  'start': 0,
+  'end': 7},
+ {'entity_group': 'ORG', 
+  'score': 0.9997708,
+  'word': 'BNP Paribas',
+  'start': 17,
+  'end': 28},
+ {'entity_group': 'LOC', 
+  'score': 0.9990601,
+  'word': 'Paris',
+  'start': 32,
+  'end': 37}]
+Pipeline
+With the Hugging Face API, you can use different pipelines to complete a task with a model. For the NER pipeline, we can use the TokenClassificationPipeline as is, but the current implementation truncates the text, so the model won’t be applied to the whole text if the tokenized text exceeds the model input size (512 in general). That’s why we have to override some functions.
+
+A Hugging Face NER pipeline is mainly composed of 3 parts:
+
+Preprocess: takes text as input and return list of ids
+Forward: takes list of ids as input and return predictions
+Postprocess: takes the preprocess and forward outputs to generate a list of dict containing entity information
+Preprocess
+For example, given a text, we have a list of 1230 ids. With the default preprocess method, the text is truncated which means only the first 512 ids will be passed to the model without taking into account the 718 other ids.
+
+Get Luc CAILLIAU’s stories in your inbox
+Join Medium for free to get updates from this writer.
+
+Enter your email
+Subscribe
+
+Remember me for faster sign in
+
+To generate different chunks of ids, we need to pass return_overflowing_tokens=True to the tokenizer.
+Now we have our corresponding ids, split into different chunks: [512], [512], [206] in our example. The last chunk will be padded, to respect the model input size.
+
+def preprocess(self, sentence, offset_mapping=None):
+        model_inputs = self.tokenizer(
+            sentence,
+            return_tensors="pt",
+            truncation=True,
+            return_special_tokens_mask=True,
+            return_offsets_mapping=True,
+            return_overflowing_tokens=True,  # Return multiple chunks
+            max_length=self.tokenizer.model_max_length,
+            padding=True
+        )
+        if offset_mapping:
+            model_inputs["offset_mapping"] = offset_mapping
+
+        model_inputs["sentence"] = sentence
+
+        return model_inputs
+Forward
+As we changed the preprocess method, outputs are different. We don’t have one chunk to pass to the model but a list of chunks. You can pass all chunks to the model at the same time but depending on your text and your hardware, you may have memory issues. That’s why we pass to the model one chunk at a time. The results are concatenated after each iteration, and we reshape the outputs to fit the required postprocess inputs.
+
+def _forward(self, model_inputs):
+        special_tokens_mask = model_inputs.pop("special_tokens_mask")
+        offset_mapping = model_inputs.pop("offset_mapping", None)
+        sentence = model_inputs.pop("sentence")
+        overflow_to_sample_mapping = model_inputs.pop("overflow_to_sample_mapping")
+
+        all_logits = torch.Tensor()
+        num_chunks = len(model_inputs["input_ids"])
+
+        # Pass one chunk at a time to the model and concatenate the results
+        for i in range(num_chunks):
+            model_input = {k: torch.unsqueeze(v[i], dim=0) for k, v in model_inputs.items()}
+            logits = model(**model_input)[0]
+            all_logits = torch.cat((all_logits, logits), dim=1)
+
+        model_outputs = {
+            "logits": all_logits,
+            "special_tokens_mask": special_tokens_mask,
+            "offset_mapping": offset_mapping,
+            "sentence": sentence,
+            "overflow_to_sample_mapping": overflow_to_sample_mapping,
+            **model_inputs,
+        }
+
+        # We reshape outputs to fit with the postprocess inputs
+        model_outputs["input_ids"] = torch.reshape(model_outputs["input_ids"], (1, -1))
+        model_outputs["token_type_ids"] = torch.reshape(model_outputs["token_type_ids"], (1, -1))
+        model_outputs["attention_mask"] = torch.reshape(model_outputs["attention_mask"], (1, -1))
+        model_outputs["special_tokens_mask"] = torch.reshape(model_outputs["special_tokens_mask"], (1, -1))
+        model_outputs["offset_mapping"] = torch.reshape(model_outputs["offset_mapping"], (1, -1, 2))
+
+        return model_outputs
+Postprocess
+As we have adapted the outputs in the forward method, we don’t have to modify this function.
+
+Pipeline
+Override the default pipeline with the newly created methods.
+
+class TokenClassificationChunkPipeline(TokenClassificationPipeline):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def preprocess(self, sentence, offset_mapping=None):
+        model_inputs = self.tokenizer(
+            sentence,
+            return_tensors="pt",
+            truncation=True,
+            return_special_tokens_mask=True,
+            return_offsets_mapping=True,
+            return_overflowing_tokens=True,  # Return multiple chunks
+            max_length=self.tokenizer.model_max_length,
+            padding=True
+        )
+        if offset_mapping:
+            model_inputs["offset_mapping"] = offset_mapping
+
+        model_inputs["sentence"] = sentence
+
+        return model_inputs
+
+    def _forward(self, model_inputs):
+        special_tokens_mask = model_inputs.pop("special_tokens_mask")
+        offset_mapping = model_inputs.pop("offset_mapping", None)
+        sentence = model_inputs.pop("sentence")
+        overflow_to_sample_mapping = model_inputs.pop("overflow_to_sample_mapping")
+
+        all_logits = torch.Tensor()
+        num_chunks = len(model_inputs["input_ids"])
+
+        # Pass one chunk at a time to the model and concatenate the results
+        for i in range(num_chunks):
+            model_input = {k: torch.unsqueeze(v[i], dim=0) for k, v in model_inputs.items()}
+            logits = model(**model_input)[0]
+            all_logits = torch.cat((all_logits, logits), dim=1)
+
+        model_outputs = {
+            "logits": all_logits,
+            "special_tokens_mask": special_tokens_mask,
+            "offset_mapping": offset_mapping,
+            "sentence": sentence,
+            "overflow_to_sample_mapping": overflow_to_sample_mapping,
+            **model_inputs,
+        }
+
+        # We reshape outputs to fit with the postprocess inputs
+        model_outputs["input_ids"] = torch.reshape(model_outputs["input_ids"], (1, -1))
+        model_outputs["token_type_ids"] = torch.reshape(model_outputs["token_type_ids"], (1, -1))
+        model_outputs["attention_mask"] = torch.reshape(model_outputs["attention_mask"], (1, -1))
+        model_outputs["special_tokens_mask"] = torch.reshape(model_outputs["special_tokens_mask"], (1, -1))
+        model_outputs["offset_mapping"] = torch.reshape(model_outputs["offset_mapping"], (1, -1, 2))
+
+        return model_outputs
+The resulting pipeline can now be used directly.
+
+pipe = TokenClassificationChunkPipeline(model=model, tokenizer=tokenizer, aggregation_strategy="simple")
+ents = pipe("Bernard works at BNP Paribas in Paris.")
+display(ents)
+[{'entity_group': 'PER', 
+  'score': 0.9994497,
+  'word': 'Bernard',
+  'start': 0,
+  'end': 7},
+ {'entity_group': 'ORG', 
+  'score': 0.9997708,
+  'word': 'BNP Paribas',
+  'start': 17,
+  'end': 28},
+ {'entity_group': 'LOC', 
+  'score': 0.9990601,
+  'word': 'Paris',
+  'start': 32,
+  'end': 37}]
+Anonymize
+We are now able to fetch all entities, regardless of the length of text you provide to the pipeline, and replace them with their corresponding group name.
+
+def anonymize(text):
+    ents = pipe(text)
+    split_text = list(text)
+    for ent in ents:
+        split_text[ent['start']] = f"[{ent['entity_group']}]"
+        for i in range(ent['start'] + 1, ent['end']):
+            split_text[i] = ""
+
+    return "".join(split_text)
+text = "Bernard works at BNP Paribas in Paris."
+anonymized_text = anonymize(text)
+print(anonymized_text)
+"[PER] works at [ORG] in [LOC]."
+Ignore labels
+If you want to keep specific entities in the text, you can pass a list of labels to ignore in the pipe method (don’t forget to pass “O”).
+
+def anonymize(text):
+    ents = pipe(text, ignore_labels=["O", "LOC"])
+    split_text = list(text)
+    for ent in ents:
+        split_text[ent['start']] = f"[{ent['entity_group']}]"
+        for i in range(ent['start'] + 1, ent['end']):
+            split_text[i] = ""
+
+    return "".join(split_text)
+text = "Bernard works at BNP Paribas in Paris."
+anonymized_text = anonymize(text)
+print(anonymized_text)
+"[PER] works at [ORG] in Paris."
+Code
+import torch
+from transformers import AutoTokenizer, AutoModelForTokenClassification
+from transformers.pipelines.token_classification import TokenClassificationPipeline
+
+model_checkpoint = "Davlan/bert-base-multilingual-cased-ner-hrl"
+
+tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
+model = AutoModelForTokenClassification.from_pretrained(model_checkpoint)
+
+
+class TokenClassificationChunkPipeline(TokenClassificationPipeline):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def preprocess(self, sentence, offset_mapping=None):
+        model_inputs = self.tokenizer(
+            sentence,
+            return_tensors="pt",
+            truncation=True,
+            return_special_tokens_mask=True,
+            return_offsets_mapping=True,
+            return_overflowing_tokens=True,  # Return multiple chunks
+            max_length=self.tokenizer.model_max_length,
+            padding=True
+        )
+        if offset_mapping:
+            model_inputs["offset_mapping"] = offset_mapping
+
+        model_inputs["sentence"] = sentence
+
+        return model_inputs
+
+    def _forward(self, model_inputs):
+        special_tokens_mask = model_inputs.pop("special_tokens_mask")
+        offset_mapping = model_inputs.pop("offset_mapping", None)
+        sentence = model_inputs.pop("sentence")
+        overflow_to_sample_mapping = model_inputs.pop("overflow_to_sample_mapping")
+
+        all_logits = torch.Tensor()
+        num_chunks = len(model_inputs["input_ids"])
+
+        # Pass one chunk at a time to the model and concatenate the results
+        for i in range(num_chunks):
+            model_input = {k: torch.unsqueeze(v[i], dim=0) for k, v in model_inputs.items()}
+            logits = model(**model_input)[0]
+            all_logits = torch.cat((all_logits, logits), dim=1)
+
+        model_outputs = {
+            "logits": all_logits,
+            "special_tokens_mask": special_tokens_mask,
+            "offset_mapping": offset_mapping,
+            "sentence": sentence,
+            "overflow_to_sample_mapping": overflow_to_sample_mapping,
+            **model_inputs,
+        }
+
+        # We reshape outputs to fit with the postprocess inputs
+        model_outputs["input_ids"] = torch.reshape(model_outputs["input_ids"], (1, -1))
+        model_outputs["token_type_ids"] = torch.reshape(model_outputs["token_type_ids"], (1, -1))
+        model_outputs["attention_mask"] = torch.reshape(model_outputs["attention_mask"], (1, -1))
+        model_outputs["special_tokens_mask"] = torch.reshape(model_outputs["special_tokens_mask"], (1, -1))
+        model_outputs["offset_mapping"] = torch.reshape(model_outputs["offset_mapping"], (1, -1, 2))
+
+        return model_outputs
+
+
+pipe = TokenClassificationChunkPipeline(model=model, tokenizer=tokenizer, aggregation_strategy="simple")
+
+# Replace entities
+def anonymize(text):
+    ents = pipe(text)
+    split_text = list(text)
+    for ent in ents:
+        split_text[ent['start']] = f"[{ent['entity_group']}]"
+        for i in range(ent['start'] + 1, ent['end']):
+            split_text[i] = ""
+
+    return "".join(split_text)
+
+
+text = "Bernard works at BNP Paribas in Paris."
+anonymized_text = anonymize(text)
+print(anonymized_text)
+"[PER] works at [ORG] in [LOC]."

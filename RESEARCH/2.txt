@@ -1,0 +1,21 @@
+Identify all the PII elements across all data attributes
+What is PII?
+Personally Identifiable Information is information that identifies a distinct individual. Examples of sensitive PII include Social Security Numbers (SSN), Driving License Numbers, Email IDs, and Revenue details. Responsible users should restrict or mask the column data so other users have no access to it. However, not all PII’s are sensitive or confidential. 
+
+How do we identify PII elements?
+Step1: Create a Privacy domain
+
+Step2: Create the PII terms in the Privacy Domain
+
+Step3: Associate at least one PII element to each term
+
+Step4: Run AI recommendation algorithms to identify the PII elements and apply the recommendations to the corresponding terms.
+
+How do we run the AI recommendations?
+Users can execute the AI Model for a whole domain, like Privacy, and receive recommendations for all PII terms. See More
+PII Data Classification
+Once all the PII elements have been associated with corresponding terms, they will be classified according to the classifications configured at the domain level automatically. See More
+
+Select the Governance catalog >> Data classification module 
+Select the Privacy Domain from the dropdown
+View the PII elements in various classifications.

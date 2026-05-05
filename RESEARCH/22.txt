@@ -1,0 +1,578 @@
+
+Search in video
+Data Anonymization for LLMs
+0:00
+I'm going to cover how to remove sensitive information from prompts before you send those prompts to a third-party LLM.
+0:06
+This is something that can be useful if you really care about privacy and want to avoid anything that's extremely sensitive going to those
+0:13
+third parties like OpenAI for example or Anthropic. Now there are two ways I'll go through doing this. The first is with
+0:20
+named entity recognition. It uses really small neural networks and also pattern matching to extract things like names, phone numbers, credit
+0:28
+card numbers, replace those with fakes, send them to the LLM and then when the response comes back try to sub them out.
+0:35
+I'll also go through a second approach which just uses a larger but still small model that you can run locally, Fi3. And here using structure generation
+0:44
+I'm going to have the model extract into JSON format the words that are potentially sensitive and need to be replaced.
+Anonymisation Performance
+0:52
+Now just as a sneak preview let's take a look at the first example here. Jane's email is Jane.do and her birthday is 1992.
+1:00
+So this text will be anonymized so that means replacing the keywords like her name, email and address with fake versions.
+1:09
+Sending that version into the LLM. In this case I'm just asking the LLM to rewrite that information a little differently.
+1:16
+And then I get the response from the LLM and I try to reverse it back.
+1:22
+Now notice how the reversal works well for the name and it works well for email but we do have some issues here
+1:28
+around the date which is difficult to reverse in some cases just using simple named entity recognition techniques.
+1:36
+The second approach is using Fi3 language model. So let's take a look at how those results come out.
+1:43
+We've an initial prompt here with the same birthday. The anonymized text has got different fake names here.
+1:50
+Then we have the rewritten response from a language model. This would be your third party language model. And then we have the reversal.
+1:58
+And you can see in this case the reversal is actually correct so it's getting right back to the same information as at the start.
+2:05
+So let me now go through in much more detail the different approaches at a high level if you want to encrypt data or avoid sensitive data
+2:13
+getting into third parties. And let me talk about the different techniques and the pros and cons of using those.
+Video Overview
+2:20
+So for a quick overview of this video let's take a look at the agenda. First off I'll talk about approaches to privacy
+2:28
+and just doing this data anonymization is not the only approach. So let me talk about that. I'll then talk about the pipeline which I just
+2:36
+demonstrated the different steps of anonymizing send into the LLM getting back the responses and then replacing to get back to the original
+2:43
+information. I'll talk about anonymization methods named entity recognition where you use a really small neural network in order to
+2:52
+do entity extraction. I'll talk about pattern matching and then the LLM based approach where I use phi3.
+3:01
+I'll go through the notebook examples in more detail and last of all I'll build on those examples just give you some tips on how
+3:07
+you might implement this further in practice. And the notebook by the way will be part of it's already part of the advanced
+3:14
+inference repo. You can find that on tvlis.com forward slash advanced inference. So the first of three approaches
+Anonymisation Techniques
+3:23
+and maybe there are more if you want to be very careful about privacy is you can just send your request to a third party like OpenAI.
+3:32
+Now a lot of these parties really have high level of security they offer things like SOC2 compliance and I think the question you have to ask
+3:40
+is if you're comparing that to running everything locally which is hard and expensive is your local setup really going to be more secure
+3:47
+than what Microsoft are able to do and I think in a lot of cases probably the answer is no because keep in mind that when you do send
+3:56
+prompts over to OpenAI these are going to be encrypted on your side. Now they are decrypted on the OpenAI side when they're sent to the LLM
+4:05
+and the responses are going to be in plain text form but then encrypted before being sent back to you and so you have encryption
+4:13
+when the information is moving along the pipe the risk is going to be at the other end do OpenAI have good security
+4:20
+and as I said because they do have these really high standards that are hard to put in place they may well have higher security than what you
+4:29
+could achieve with your own system. So with that caveat that maybe what
+4:34
+you're doing is already not a bad approach you can consider option two which is to run a local LLM and here for example if you have a Mac
+4:42
+with an M1, 2 or 3 chip you can run a gguf model maybe 5.3 the mini model it's about 7 gigabytes of RAM so you can
+4:52
+fit it into most Macs with an M1 and that's going to give reasonable performance but it's certainly not going to be as good as Opus
+5:00
+or GPT4 so the big limit of running locally is that it's just really hard
+5:05
+to get the same performance and quality. You could of course run locally by buying a graphics card like an RTX 4090
+5:13
+or you could rent a GPU this will avoid your data going to a company like
+5:20
+OpenAI or Anthropic but this isn't even a local approach because you are sending the data then into some
+5:26
+service like RunPod or AWS and have to think about the data security there. So that brings us to the third possible
+5:34
+approach which is maybe somewhat between these two approaches although it can kind of benefit from the best of both worlds you get the high quality
+5:42
+enterprise security but you redact information first and quite simply you'll start off with some prompt that has sensitive
+5:50
+information maybe about Billy and his phone number and you replace that with a fake value so that when you send this request into
+5:57
+the language model the language model will still have good context. You see if you just put in placeholders and this can kind of mess up the
+6:04
+meaning and you might find that the response you get back from the language model is not exactly as good quality
+6:11
+as if you'd left in the original info so yeah putting in good fake names is one way to get good performance from the language model
+6:18
+and ideally on the other end you're able to reverse that process and get back to an answer where any relevant
+6:25
+anonymized information is correctly reversed back to what you had originally. So there are a few methods if you want to do this
+6:33
+anonymization one of those methods is called named entity recognition and there are there's a suite of models
+6:42
+that is designed for doing this let's take a quick look at the spacey family and there's a there are kind of two main models here there's
+6:50
+en English core web large and then there's small sm now these are available I believe in a few other languages definitely Spanish
+6:58
+so just be aware that if you're working in a different language you will need to use another model so if you take a look at the files here
+7:07
+this it's actually one repo but many different things within that repo
+7:12
+so for example there's a tool for tagging here for converting from tokens to vectors there's a lemmatizer here so that
+7:20
+would for example switch from a word running into run so there are all kinds of tools here one of the key tools
+7:26
+is any or named entity recognition you can see it's really quite a small model
+7:32
+only six megabytes and what this model does is it's been fine-tuned or not fine-tuned it's been trained
+7:40
+in order to detect entities of different types for example name for example phone number credit card number these are different
+7:49
+examples of entities and it's trained basically as a classifier to detect within a sentence not just what named entities are in there
+7:57
+but what characters that entity will take so if you have the word Ronan then and Ronan is maybe in the sixth character
+8:06
+until the tenth this model will return Ronan as a name and it will say Ronan is taking up from six
+8:13
+until ten in character positions along that sentence so this is a tool that allows us to extract which named entities are included
+8:23
+and once we can extract them then we can decide to swap them out as we wish now i'll talk a bit about how you swap them out for
+8:31
+fake values we're going to use a package called faker f-a-k-e-or and that simply generates fake versions of
+8:38
+phone numbers names that you can use to replace now a second method here is just simple pattern matching
+8:46
+if you have structured information like phone numbers or credit cards they follow a very specific type of syntax and using
+8:54
+rejects type extraction you can quite simply match those and pull them out and this is generally going to be really accurate
+9:01
+um whereas the named entity recognition may in some cases misnames or it may
+9:07
+miss other attributes but yeah pattern matching is going to be pretty exact because it is an exact tool except in the case where you have
+9:15
+some typos if you have typos in the data like the phone number there's an a that gets mixed in there
+9:22
+that might cause things to get thrown off a little bit although there are techniques where you can use fuzzy kinds of matching
+9:29
+to get around small amounts of errors now the last method you can use is just focus on having a larger
+9:37
+albeit small language model like phi3 and the key to making this work
+9:42
+is to use structured generation if you just prompt it to extract the data you won't get the consistency
+9:49
+you may not even get the performance actually if you just prompted to extract information in a certain format
+9:56
+it's critical that you constrain the output using a library like outlines and what outlines will do is it will
+10:03
+basically in the response force the LLM to respond with this curly brace to respond then with uh these apostrophes and then it
+10:14
+will allow the language model to generate only the text so it basically constrains what the language model can generate
+10:20
+in all of these positions here of the JSON and it will then allow the language model to just give
+10:27
+the strings that are required and this not just makes the response reproducible but it also actually improves the performance
+10:36
+and that's pretty important because sometimes the small models are just not strong enough to do name or to do entity extraction
+10:43
+i've shown a video before with data extraction i think i was using a 34b model it was a fine tune of the ye34b model called smog
+10:52
+and that performed well but here the amazing thing is that using just i think it's around a three three and a half billion parameter model
+11:00
+um i'm actually able to get pretty good performance on entity extraction
+Libraries - Presidio, Outlines
+11:05
+so let's talk about the libraries that i'll be using for each of the approaches in the named entity recognition approach i'm going to use presidio
+11:14
+presidio is basically a wrapper that incorporates a number of tools including the spacey model it's developed by microsoft
+11:21
+and then as i mentioned i'll use faker in order to generate fake names phone numbers now for outlines um sorry outlines is the package i'm going to
+11:32
+use in combination with the phi3 model which is seven and a half gigabytes in size and this is the way that i'm going to
+11:40
+use the language model to extract and then replace back in the correct words now there's a certain
+11:47
+um there's a certain benefit i should emphasize to the second approach here using a language model and that benefit is around
+11:54
+the de-anonymization when you're going to reverse the anonymization
+11:59
+in the first approach you're literally going to try and check for the anonymized words like say john is or billy is replaced with say john
+12:08
+you're going to try search for john and switch it back to billy but the problem is if john appears in a slightly different format like maybe
+12:14
+john with a surname john biller or john marx or whatever that's not necessarily going to be easy to swap back out
+12:22
+uh to billy whereas if you're using a language model you can use the language model to do those swaps at the end
+12:29
+and of course the language model is more fluidly able to recognize what to swap out and how that would become more clear when we go through the
+12:36
+example just before we do a few quick notes on performance if you use a structured data approach
+12:45
+so i'm talking about removing sensitive data that has a very clean structure
+12:51
+this is going to be fast you can use prosidio library it's also going to be quite reliable uh except if you have maybe some typos
+12:58
+within your input data by contrast if you are trying to extract moderately structured data like names which can be in different forms first
+13:07
+name surname or addresses um this is going to be fast but it can be somewhat unreliable if you're just relying on named entity
+13:15
+recognition in particular reversing the anonymization can be tricky
+13:20
+the other option you have for moderately structured data is you can use the slower albeit perhaps more reliable approach of a language model
+13:29
+with structured responses in order to extract that sense of information so we'll jump over now and take a look at both of these approaches step by step
+13:37
+in the notebook okay so two parts we're going to go through first using prosidio anonymization here the techniques for extracting the
+Notebook Demo: Using Presidio for Anonymisation
+13:45
+sense of data include direct matching like regex context matching like using the tiny spacey model
+13:53
+and then the second approach is the local llm based anonymization where we use phy3 with structured generation from outlines
+14:04
+okay so within the prosidio approach i'm going to do this uh twice
+14:11
+the first time i'll do it just showing entity extraction and anonymization and then i'll do it again
+14:17
+where i do entity extraction anonymization processing and then reversal of the extraction so to get started
+14:24
+um we're going to install here uh prosidio so i've run this cell
+14:31
+and i'm going to define an initial sentence that we want to anonymize and send to the language model so jane with her email and her birthday right here
+14:40
+now with that run i'm going to set up an analyzer the analyzer is a rapper around a series of tools that include regex extraction
+14:48
+that include using the spacey model for entity recognition so we'll run that cell and we're going to use this analyzer
+14:56
+to analyze the text and we'll tell the analyzer that our language is english
+15:02
+and we'll ask it to remove these entities here phone number now if i uncomment this it's just going to remove all of the
+15:10
+entities that it can alternatively i could list other entities here like name or various entities like credit card in
+15:19
+fact you can check a list of those entities on this page here which i'll copy into the notebook for example your credit card which is
+15:26
+determined via pattern match and check some check some just checks that the numbers follow a pattern required for credit cards
+15:34
+datetime pattern match and context so you can see datetime also makes use of one of the spacey small neural networks
+15:42
+email address pattern match context and then this validation here so a whole range of entities
+15:49
+you'll notice that there are ones that are region specific like social security number for the us and nhs number for the uk
+15:56
+etc and you can also generate your own custom named entities if you like to so we're going to analyze
+16:04
+just on extracting everything possible so when you run this cell it's going to extract a few things the email address the datetime the person
+16:12
+and the url now notice how for each entity extracted it tells us the start character and the end character
+16:19
+and also kind of a score of confidence in that being an actual entity like url so with that we'll move on to replacement
+16:28
+and really what replacement does you could write the python code yourself it just takes this information on the extraction
+16:36
+and then it uses those positions to pull out that information except this wrapper will have the ability to replace
+16:44
+with certain default strings that are just often with sharp brackets and then something like name or person or credit card
+16:51
+number or you can define a custom replacement where you put in fake information and that's what we're going to do here with faker
+17:00
+so we'll install faker and we're going to set up an operator that will generate a fake name that can replace any names in the text
+17:09
+so here we're setting up an operator for person entity and it's going to apply the fake name function that we've defined here
+17:18
+now notice how i've set a seed for this function this just means that the fake name will be the same every time i run this
+17:24
+if you're going to run in production you want to turn off the seed so that you just have randomness in the fake name that's being generated
+17:30
+so with that we're going to apply the anonymization engine which really just means that it's taking in the text
+17:38
+and the information on where the entities are and then it's doing some simple extraction based on that information
+17:45
+which is all formulaic and it's going to replace any of the person entities with a fake name
+17:53
+now won't replace any of the other extracted entities with fake values because we haven't set that up so you can see the original text
+18:01
+here on Jane's email Jane is replaced with Alison Hill whereas the email and her birthday are replaced with
+18:07
+placeholders because we haven't defined replacement functions so this is how you can anonymize your text
+18:15
+and in some cases that will be sufficient you anonymize it you send it into the language model you get back whatever
+18:22
+analysis you need and maybe you're done but in other cases when the
+18:27
+information comes back you may want to replace back in the names the credit card numbers or the phone numbers
+18:34
+so let's go through an example where we go end to end anonymizing processing and then on the way back
+18:41
+replacing back in the original values now the tricky thing of course is that
+18:46
+you don't know exactly how the language model will process the information so it might kind of tweak things in a way that
+18:52
+makes the replacement difficult and that's where you'll see a difference in the performance of a more exact match
+19:00
+de-anonymization versus using a language model to do the de-anonymization as we will do later so for the reversible anonymization
+19:09
+we're going to use the presidio analyzer but we're actually going to use a custom anonymizer so
+19:17
+what i mean there is when we get the information from presidio on where the entities are and what the entities are
+19:25
+we're going to use that to just manually with some manual code or custom code rather extract those entities
+19:32
+then we're going to define some fake names and we're going to have a mapping between the fake names and the originals and that mapping will allow us to
+19:39
+reverse the transformation when we get back information from the language model so let's make sure we've imported
+19:48
+everything set up faker for english us or you can set uk i don't know if it allows ireland
+19:54
+irish english unfortunately then we're going to add in three entities to be faked so um internet which is for urls
+20:03
+emails person date time and we will then initiate our analyzer
+20:10
+and now we're going to define that custom anonymization function so there are basically what this function is doing is replacing
+20:18
+it's taking in the information from the analyzer results it's taking in the text that needs to be anonymized
+20:24
+and it's simply doing those replacements so you can see here for example the original value is basically the result going from the
+20:32
+start point to the end and that's then the fake value is set up using the replacement function and so
+20:40
+we have this happening for three entities i'm just going to focus on the email address the person and the date time
+20:48
+so these are the only things that we're going to consider sensitive and when we run this anonymized text function we'll get back
+20:55
+updated text which will have the values replaced but importantly we'll get back a mapping between the original and fake values
+21:02
+which is needed when we want to reverse things later and indeed because we have that entity mapping we have a short
+21:08
+custom de-anonymization function where you take in anonymized text you take in the mapping and then basically it's just going to replace
+21:17
+the fake values with the real values and you can see a little bit here why this may not be fully robust because it's going to search for the fake
+21:26
+values that were defined before we process the prompt but depending on how the prompt is processed those fake values might be
+21:34
+transformed like bobby uh bobby kennedy might just end up being bob or kennedy and that is not going to be as
+21:42
+easy to replace on the reversal which we'll see a bit later so let's run through this pipeline with the same example
+21:50
+and let's analyze those results so we have text entities
+21:56
+and then language so here i'm just setting up that analysis to get up
+22:02
+to get out the positions of each of these entities and we're going to print out just so we can see everything the original text
+22:09
+the result of the analyzer and then we're going to run the anonymization which is just the replacement and print out those values
+22:16
+so here we are on uh jane's email here we are on the analyzer result
+22:22
+so you can see the email address date time in person with the positions and just notice how like for person to start to zero and
+22:30
+the end is four and that makes sense because the characters are indeed going here from positions
+22:37
+at zero one two three four i guess this may be including the comma or the apostrophe and then the anonymized text is correctly
+22:44
+replacing in angie henderson it's replacing in the email and replacing in the birthday here now just one little small
+22:52
+error or not error but kind of thing we would not we prefer to see differently is here the email is donald garcia
+22:59
+which um you know that doesn't strike me as the email that angie henderson uses so this is maybe not ideal because sending this into the llm
+23:08
+it probably won't cause an issue but it's not going to be as obvious that this email really should be associated with that name
+23:14
+now there are ways that you could do this programmatically so for example you can specify the fake name to be female
+23:21
+but then you need to make sure that you're detecting a named entity that's going to be a female and actually the detection that presidio uses
+23:30
+just detects names it doesn't detect whether it's a female or a male name so you would need to detect the name then maybe use a lookup table
+23:38
+for a list of all names and check whether that name is likely to be male or female and based on that you could decide to replace
+23:46
+with a female or male name so i'm saying yeah you can fix some of these issues you could also decide then to um
+23:53
+put in maybe a female email address but yeah it becomes more complicated because to replace in an email here that's faked
+24:01
+and that's going to be faked to match the name that's going to be more difficult to do programmatically and just to show here the entity mapping
+24:10
+so we're mapping from Donald Garcia to Jane Doe that'll help us reverse and from Angie Henderson to Jane
+24:17
+and from this date to this date and notice how Angie Henderson is mapped to Jane so if the language model just responds with something that says
+24:25
+Angie that won't necessarily be replaced and you could probably programmatically set up replacements
+24:31
+that will work with chunks of what the key is but still that's an area where you can lose robustness
+24:38
+now i want to simulate this end to end so with this anonymized text i want to process it by a third-party language model and the language model
+24:47
+i'll use here is open ai so i've entered my open ai key and i'm just going to send in the anonymized text and ask the language
+24:55
+model to rewrite it a little differently and this kind of simulates what happens in a real case where your
+25:01
+anonymized text will be changed a bit and we'll see if we can accurately de-anonymize it so i'm sending in that response to GPT
+25:09
+3.5 turbo getting back the generated text printing it out and then i'm going to de-anonymize with my function
+25:17
+and here you can see the anonymized text going in the response which is just slightly rephrased
+25:23
+and then the de-anonymized and this process is working for two out of three
+25:28
+things so i'm getting back from Angie Henderson to Jane because GPT responded with Angie Henderson
+25:36
+not just Angie i'm getting back to the email but i'm not getting back to the original date and the reason i'm not getting back
+25:43
+to the original date is because my mapping is not matching exactly so if i go back up here and i check the mapping
+25:52
+the mapping is going from 71 to 92 but with the date in this format
+25:58
+and the format that it's actually presented in by language model is no longer this day, month, month, year, year
+26:06
+so it's not able to revert back now you could put in some custom logic to try and cover some different cases around
+26:13
+but it just gives you a sense of how it's not necessarily going to be robust when the format of the information can change
+26:20
+it's kind of hard to get the de-anonymization right so i'll just show the full example here nothing new but the original text
+26:28
+the anonymized text with the name, email and date replaced what's sent to the LLM, what comes back
+26:35
+and then what's de-anonymized so a score of two out of three here
+26:40
+and as i mentioned you can write some programs that will cover some of these edge cases and you can write those based on your
+26:47
+specific use case you can also turn on fuzzy matching which will allow you to grab slight misspellings
+26:54
+and that's something you can configure if you take a look at the Presidio documentation i believe for the analysis
+27:01
+but you can also configure that in the custom functions you build for the de-anonymization that's probably where the fuzzy matching
+27:08
+is more relevant i will note that there is a wrapper that Langchain has it's called reversible presidio
+27:18
+anonymization i think you can check out just Langchain and presidio and it allows you to reverse
+27:25
+the anonymization it's basically a wrapper around the custom functions that i built myself above here all right so we're going to take a look now at a
+Notebook Demo: Using Phi-3 Mini + Outlines
+27:35
+different approach to doing this which relies just on a local model and of course the drawback is you need to run the local model which is going to
+27:43
+add latency and it also means you need to have some kind of GPU or maybe a Mac M12 or 3
+27:49
+so i'm not saying this is trivial it will kind of put a little bottleneck but because the 5.3 mini model is actually quite strong
+27:58
+you don't have to have all that much VRAM so it may be interesting for some use cases and the way that this is going to work
+28:05
+is by using language model locally on the way out and the way back so we'll anonymize using language model on the way out and de-anonymize on the way back
+28:15
+so here i'm going to install all of these packages notably i'm going to install outlines which allows me to work with this model
+28:22
+using structure generation i'm enabling fast downloads of weights
+28:27
+and i make sure that i'm logged into open ai i did log in earlier on so that should work fine
+28:35
+now i've downloaded the model here um if you're working on a GPU that has
+28:41
+ampere or later i've got an l4 you can use flash attention so that is an option if you want to load the model
+28:48
+i can probably try to just load the model here like that right now now there are two functions we need we need to anonymize and then we need to
+28:56
+de-anonymize and in each case we're going to be asking the help of the language model locally to do that for us
+29:04
+so let's take a look at how we're going to set up that prompt so we're going to say you're a data anonymization assistant
+29:11
+your task is to replace identify and replace sensitive information with fake but realistic values and you can see i've just got this tip here to
+29:20
+use fake names of the same gender and region so replace Jane with Mary or Pedro with Louise
+29:27
+you can see we have a one-shot example so we provide a string of text that we want the language model to extract entities from
+29:35
+we give a sample result which should have the original values and also the suggested replacement or faked values so you can see here it's changing
+29:43
+John Jo to Jim Jaxx and it's changing the date slightly here the year and the month and the day
+29:50
+and we're asking the language model to respond in JSON which we're going to enforce via the outlines package
+29:57
+and we're going to inject here the actual text that we want to anonymize that's what these curly braces here mean
+30:05
+so just to summarize we have the request we've got a one-shot example and then we have the actual instruction including the actual string
+30:13
+that we want to include and the way we're going to enforce the output syntax is by defining a pydantic model and that model will have an original
+30:23
+and replacement dictionary and the dictionary as you'll see here will contain name then the string email date so this is being enforced and now we've
+30:34
+two examples that we're going to try out so we will define the prompts as
+30:40
+replace sensitive info with an input of the text coming from the text array and then we're going to generate
+30:48
+an output from the LLM using outlines.generate and this here is really just a wrapper around transformers
+30:54
+but it includes enforcement of the rejects it includes enforcement of the output so with the generator defined we've got the results
+31:04
+coming by passing the prompts into the generator and now we can basically use those results
+31:11
+to do a replacement on the original text and that's what's happening here so taking the input text and the result we're basically doing some swaps
+31:19
+so here you can see the replacement we're doing replacements using the help of the LLM's entity recognition
+31:28
+so let's just take a quick look at that and I'll note that you can run this using VLLM or using TGI so if you have a CUDA GPU locally
+Notes on vLLM, TGI and GGUF on Mac
+31:40
+I'd recommend running either VLLM or TGI they both allow for structured generation so you can enforce that syntax on the
+31:49
+output. If you're using a Mac that's probably going to be a bit harder I need to check I'm not quite sure
+31:54
+somebody can maybe comment if there's a way to use outlines with GGUF I'd be surprised if there isn't but that is something that you need
+32:02
+in order to get the performance that we're looking for here okay so here we have the original text and you can see it's been swapped out
+32:10
+Ryan Cooper and by a fake and Jane is being replaced by Emily Brown
+32:15
+so this all looks good here. Now next up we will simulate the task with OpenAI
+32:21
+simply by passing in the anonymized text and then asking for that to be written in a different way in the form of a sentence
+32:28
+and I've run this earlier so the values are a bit different but here you can see we're sending in anonymized text and then
+32:34
+the language model which is GPT 3.5 is just rephrasing it a little bit to give this response here and the same because I've run a second example is
+32:43
+true for Linda Miles. Now given these responses from the LLM we want to de-anonymize them so we need to set up a de-anonymizer
+32:52
+and the structure is quite similar with an instruction that this is a de-anonymization assistant and we've got an example
+33:00
+for Jim Jax here where Jim Jax has been de-anonymized with this mapping back to this correct answer here with John Dole
+33:08
+and following the one-shot example we then have the output instructions and we inject the actual text to de-anonymize and we inject the actual
+33:16
+mappings that we want to be used for that de-anonymization and in the same way we replaced on the way out we replaced on the way back
+33:24
+so we swap out the fake values with the real values. So I've run this earlier and you can see here the initial prompt
+33:32
+the anonymized going to James Duke then the rewritten is slightly reworded just notice how the date format changes
+33:40
+and then we go back to the original here and notice how this actually works perfectly so John goes to James and back to John the email goes back
+33:50
+and you see the language model is able to handle the change in format of the date which was not working well when we use something like Presidio
+33:57
+so basically you're getting more robustness in this case because the language model is more flexibly able to interpret the fake names
+34:05
+and the original names and accordingly replace them in a way that syntactically is giving better continuity.
+34:13
+You can check out here as well the example for Jane going to Linda and back to Jane and again it's able to handle the issue of the date changing.
+34:22
+So that's a quick overview of how you can use a local language model to anonymize on the way out as I said it is going to have more latency
+34:29
+than using a Presidio type approach which I'd recommend trying to get to work as a first cut. Now I'm just showing here pretty short examples
+34:38
+so you'll need to test them out when you have much longer paragraphs of text and see if the language model is able to withdraw all of the sensitive
+34:46
+information or is maybe missing out on some values. Now you probably could think of running a few different passes
+34:53
+maybe combining the two techniques that might be away or even using the language model as kind of a cleanup technique
+35:01
+after doing some initial replacements but hopefully these two techniques give you a basis that will allow you to do
+35:08
+some replacement and sanitization of your data before it goes to a third-party LLM. And that's it for this overview on how you can
+Resources
+35:16
+anonymize the prompts that you're going to send to third-party LLMs. You can find the scripts on trellis.com under the advanced
+35:23
+infrastructure section if you want to purchase lifetime access to the repo. It contains many other scripts from the historical videos here
+35:31
+including one you might want to check out again on data extraction. For now let me know any of your comments below
+35:39
+and if you have any questions on this video let me know your questions down below in the comments. Cheers!
+

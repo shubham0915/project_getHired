@@ -1,0 +1,155 @@
+
+Chapter 1: Intro
+0:00hey everyone welcome to nerding IO I'm JD and today we're going to be talking about Lang chain and its experimental feature called masking a real world
+0:099 secondsexample of this would be maybe you're a customer support system and you're actually getting information from users and you need to scrub that data so that
+0:1717 secondswhen you're putting it into your llm it's actually masked from the actual information that it needs so we're going to look at not only the masking feature
+0:2626 secondsas well as some of the streaming capabilities and then actually look at it in Langs Smith just to see what the output
+0:3333 secondsis so with that let's go ahead and get started all right so the first thing that we're going to do is we're actually going to look at the Lang chain docs um
+0:4242 secondswhat's interesting about this is so if you go into the experimental uh section Underneath more and go to masking this is where we're
+0:5050 secondsgoing to find it however this is only available for Lan chain JS and the way that I came about this is I was actually
+Chapter 2: Real World Scenario
+0:5959 secondsreading their blog post where they're talking about how uh different systems are actually using masking for the pii
+1:051 minute, 5 secondsor personal personal identifiable information removing that from the uh
+1:121 minute, 12 secondsthe llm so a real world scenario is that this could be in a customer report support system and it's receiving
+1:211 minute, 21 secondsmessages that are sensitive uh based on the the customer information and you want to mask that information we're going to look at multiple different
+1:281 minute, 28 secondsexamples uh specifically in nextjs but we're going to go through the three that they have here we have a basic example we're going to look at the kitchen sink
+1:371 minute, 37 secondsand then we're actually going to look at the nextjs Stream So I built this in a couple different ways where we also have some utilities and then we'll actually
+1:461 minute, 46 secondsdo a goey where it looks like it's it's just kind of a chat so the first thing that we're what you're going to need to
+1:551 minute, 55 secondspay attention to is make sure that you're getting the Lang chain open AI install um because it has some of the
+2:032 minutes, 3 secondsexperimental uh pieces in there uh and this is specific to open AI so let's go ahead and get our project up so if I
+Chapter 3: Getting Started
+2:112 minutes, 11 secondsopen this code and remember if you sign up for the newsletter you'll uh you'll have access to this code base as well as
+2:182 minutes, 18 secondsthe the versel example but if you if you want to start this from scratch you want to make sure that you have your environment variables so you have the
+2:262 minutes, 26 secondsLang chain uh tracing this is all for um Smith specifically and then you are going to need an open a I key so what I
+2:342 minutes, 34 secondsdid for this is I specifically built a um an API just called masking and I just put in different routes for the basic
+2:432 minutes, 43 secondsroute kitchen route and the stream route um and then we'll also go through down here you can see the uh masking parser
+2:512 minutes, 51 secondswhich I just put in in a UTS file this is using App router um so just uh for this example just know that so if we
+3:003 minutesdive right into the basic example um what we can see is the fact that it's actually creating uh some text
+3:093 minutes, 9 secondsand this is what we want our mask to look like so specifically it's giving a essentially a random hash and then an
+3:163 minutes, 16 secondsidentifier that we know okay this mask is particular to this uh type of data we
+Chapter 4: Basic Example
+3:243 minutes, 24 secondsare again you're going to be pulling in the Lang chain experimental make uh masking and then we're actually using
+3:333 minutes, 33 secondsregex for defining what these masks are so we're building a regx masking Transformer and it's taking the hash
+3:423 minutes, 42 secondsfunction if we want as well as like the pattern itself so these are our different patterns you can customize them however you want these are just
+3:493 minutes, 49 secondsbased on the example from the docs themselves and then you're taking this information and you're putting it into
+3:573 minutes, 57 secondsyour masking parser and you're adding the Transformer last part is you're going to actually mask this information so you
+4:054 minutes, 5 secondscan take whatever input you have you can see here it's got things like email as well as a phone number and more email
+4:124 minutes, 12 secondsand we'll actually mask the information based on the parser and then what I did just for this example is to show you that you can also
+4:214 minutes, 21 secondsrehydrate this is really important so that if you want to uh then show that it's not it's not a one-way mask you can
+4:284 minutes, 28 secondsactually um disable it as well and the interesting thing is you could technically use this on the front end because it is Javascript um I'm just
+4:364 minutes, 36 secondsdoing everything in the back end just to show how it works and then we're going to Output this Json uh right here so if we bounce back to our browser and we go
+4:454 minutes, 45 secondsahead and we look at our first example here we're just going to go ahead and refresh you can see that the mask is let
+4:524 minutes, 52 secondsme blow this up for you we can see that the mask is uh
+5:005 minutesis actually the mask is actually going over the email as well as the phone number
+5:085 minutes, 8 secondsand you can even see it over here it's catching the phone number as well and then we when we rehydrate we're actually looking at the uh the information that's
+5:185 minutes, 18 secondscoming back from it if we look at our uh text we can actually see a console logged here as well again I'll
+5:255 minutes, 25 secondsblow this up a little bit um where you can see the the information
+5:345 minutes, 34 secondscoming back from in the back end of it being masked as well as it being uh hydrated we're not actually doing
+5:425 minutes, 42 secondsanything with the chaining right now what we're doing is actually just transforming the data uh that we have before we actually put it into more
+Chapter 5: Kitchen Sink Example
+5:525 minutes, 52 secondsinformation all right so next we're actually going to jump to the kitchen sink example so if we go back back to
+5:595 minutes, 59 secondsour documentation you can look at the kitchen sink here and we're you can see that we're using a lot of the same uh
+6:086 minutes, 8 secondsfeatures but there's a little bit of this being extended with different patterns for the reg X as well as you can see some venting so what we're going
+6:166 minutes, 16 secondsto do is we're actually going to take all this and we'll put it in a u tailes file so if we go back to our
+6:236 minutes, 23 secondscode if you notice I have the the route already made right here it just has has
+6:306 minutes, 30 secondsthe import for the utility that we're actually going to build it has the message with all the pii information and
+6:376 minutes, 37 secondsthen we're actually going to just hydrate and uh I'm sorry we're just going to mask and then rehydrate and
+6:446 minutes, 44 secondsreturn a response so far everything that we're doing again isn't going through the stream so we could actually do this on the front end I'm just choosing it to
+6:536 minutes, 53 secondsdo it on the back end um as good security practice so if we look at our utility you can see it's in our uaes
+7:007 minutesfolder our masking parser and then we have our import again we're pulling in
+7:077 minutes, 7 secondsthe experimental masking what we're doing here is we're creating a simple hash what this will do is it'll actually
+7:147 minutes, 14 secondsallow just as like before basically uh a variable number uh system as a randomized hash we're also going to be
+7:237 minutes, 23 secondsassigning like a readable variable beforehand so we'll know which mask is actually doing the reg
+7:307 minutes, 30 secondsX and then as we go down to these patterns all of these are are really just reg X patterns when I ran this the
+7:397 minutes, 39 secondsfirst time I noticed that this uh question mark I actually isn't permitted in the uh regx for JavaScript and it was
+7:477 minutes, 47 secondsthrowing an error so what I did is I actually commented this out removed that um probably not the best uh and I'm also
+7:577 minutes, 57 secondsnot the best at regex so if you have a better way of doing this would love to see it in the comments um but I I asked
+8:038 minutes, 3 secondschat and this is what it told me so that is one thing to be aware of that if you're copying and pasting from the um
+8:128 minutes, 12 secondsthe guides to just kind of watch out for this this piece uh with all of these reg X's we
+8:198 minutes, 19 secondsare then going to put them into our masking Transformer right here we'll have our patterns and then we have our different hooks for each stage of the
+8:288 minutes, 28 secondsmasking and hydrating so basically these are different events that are going to be fired and we'll have uh we can have different functions we're just going to
+8:358 minutes, 35 secondsbe console logging just like the documentation would say but uh we can actually see this information lastly
+8:438 minutes, 43 secondswe're actually going to initialize the masking uh parser then we're just exporting it so we can use it back here
+8:498 minutes, 49 secondsin our kitchen sync so let's go ahead and just do a quick test if we go back to our uh URL here we can actually see
+9:009 minutesthat this is the masking uh kitchen example we'll go ahead and do a refresh and we'll find some interesting things going on here so not only is it doing
+9:099 minutes, 9 secondsthe hashing as expecting and hydrating we're seeing some some different kinds of Errors so right here we're noticing
+9:179 minutes, 17 secondsthat name is actually uh doing the first part of name but it's not actually doing it for do which is kind of interesting did recognize the email but then it
+9:269 minutes, 26 secondsactually saw the hash that the email was creating and thought it was a bank account so it's hashing the uh the random hash here
+9:359 minutes, 35 secondswhich is pretty interesting so this is where maybe like the regx that we took out is a is it needs to be a little more specific the
+9:439 minutes, 43 secondsother thing we'll notice is that the driver's license uh and passport are incorrect as well as when we have our
+9:529 minutes, 52 secondsname here which uh is just called bank account it actually recognized that as a
+9:599 minutes, 59 secondsname so you need to be careful with your regx uh just to make sure that it is actually masking the appropriate
+10:0710 minutes, 7 secondsinformation um as well the other thing that I found interesting is that when it rehydrated and it had we had this email and the
+10:1610 minutes, 16 secondsbank account which was actually hashed again it it doesn't actually go back through and do the
+10:2310 minutes, 23 secondshash uh for email what it's doing is it's taking the bank account that it had it tried to mask and actually putting
+10:3110 minutes, 31 secondsthat number back in but not the entire number so it's not running it twice which makes sense but just interesting
+10:3810 minutes, 38 secondsuh kind of things to look out for when you're when you're doing your regex to make sure that you're you're getting the information that you actually want to mask and then being able to rehydrate
+10:4810 minutes, 48 secondsit real quick everyone if you haven't already please remember to like And subscribe it helps more than you know also all the code for this will be in
+Chapter 6: Customer Support Example
+10:5710 minutes, 57 secondsthe link below you just sign up for newsletter you'll get the code as well as the link to versel and with that let's get back to
+11:0411 minutes, 4 secondscoding all right so next what we're going to do is we're gonna actually go back and look at our stream example and
+11:1211 minutes, 12 secondsthis is actually taking uh chat history and doing a payload so this is where we're actually going to see information going into our sequence and what I did
+11:2111 minutes, 21 secondsfor this is I actually made an entire chat sequence right here that we can actually use so we have a UI that has
+11:3111 minutes, 31 secondsdifferent uh pii information going back and forth between two parties and we're actually going to take this information and pass the entire history and then try
+11:4011 minutes, 40 secondsand get a summary of that so that we can see what the uh customer support might see or how we can mask all this
+11:4811 minutes, 48 secondsinformation and still pass it through the llm so let's go ahead and take a look at the code for
+11:5511 minutes, 55 secondsthis the first thing we're going to do is we're actually going to take a look at the front end and so this is the code
+12:0312 minutes, 3 secondsthat I put together again this is available if you um just click the link below and sign up for the newsletter but
+12:1112 minutes, 11 secondsit has the chat history we have a role and we have our content and it's basically just an array of adjacent
+12:1812 minutes, 18 secondsobject we have the ability to add a new message to our array as well as uh send a message send a single message to
+12:2612 minutes, 26 secondscontinue that chain and then we're also doing a U we're taking the entire chat history and we're posting it to our
+12:3412 minutes, 34 secondsStream So what we're going to be doing with that is when we receive the information we'll actually uh be getting
+12:4212 minutes, 42 secondsthe entire chat history and being have it being sent over so again this is uh you can see this is the the key press
+12:5012 minutes, 50 secondsand things that and the send button to to send the entire uh chat history right here so once we click this button what
+12:5912 minutes, 59 secondswe'll do is we'll send it to the stream the entire uh chat history and as you can
+13:0613 minutes, 6 secondssee here we're still going to be using our utility that we built and you can see some of the other things that we're
+13:1313 minutes, 13 secondsimporting is actually chat open AI as well as our prompt template and then our byes bytes out parser output po parser
+13:2313 minutes, 23 secondswe're also in nextjs so we're going to be using the runtime of edge the first thing we want to do is format the message so we're going to be taking our
+13:3113 minutes, 31 secondsrole so we know who's speaking and we're going to be taking the content that was being said between for that uh that role
+13:4013 minutes, 40 secondswe're going to take all this we're going to create a uh customer support prompt uh prompt template and so what
+13:4913 minutes, 49 secondsthis is saying is that you are a customer support summarizer agent always include pii m pii in your response
+13:5713 minutes, 57 secondshere's the current conversation this is what we'll pass into our template and then with the input from the user which will be the latest part of the the
+14:0614 minutes, 6 secondsmessage so as you come down to the actual post part of this the stream you can see we're getting our body
+14:1314 minutes, 13 secondsinformation we're checking to see if there's messages otherwise give a blank array we're taking the previous messages
+14:2114 minutes, 21 secondswhich is going to say one from the last one so it's assuming that as you click the button it's going to grab everything
+14:2914 minutes, 29 secondswith the last message and then the current message which is going to be the newest input again so what this is doing is
+14:3814 minutes, 38 secondsit's taking the the single message and it's actually putting it through our masking parser to actually take that
+14:4614 minutes, 46 secondsinformation and and Ma successfully mask it so what we're going to do here is we
+14:5314 minutes, 53 secondsare going to actually then we're going to see the guarded history so we're taking taking all the messages joining
+15:0015 minutesthem as an array and doing the same thing we're going to mask that entire history next we're building out our
+15:0815 minutes, 8 secondsprompt template and this is where it's actually going to go through the llm because we have our model here and we have our output parser and then we're
+15:1615 minutes, 16 secondschaining our events from our prompt our model and our output right here you can just see that we're console logging the message itself
+15:2515 minutes, 25 secondsthe entire history and then we're actually mapping the state of each one
+15:3115 minutes, 31 secondsof the hashes to the pii information so we'll see that in our response next
+15:3815 minutes, 38 secondswe're going to stream this data sorry we're going to stream this data and uh put it into our chain right
+15:4715 minutes, 47 secondsof these are the variables that we're looking for inside of our prompt template that we're going to replace with then we just have our our stream
+15:5515 minutes, 55 secondsresponse so let's go ahead and go over to our browser and actually see this in action so the first thing we're going to
+16:0316 minutes, 3 secondsdo is we're going to just scroll to the bottom we can see we have all our pii information there's a mix of information and we're just going to click the send
+16:1016 minutes, 10 secondsto chat history you can see right here it's starting the stream and so now we're actually getting our information
+16:1816 minutes, 18 secondsback you can even see in the response that it's grabbing the particular information again we're having that uh
+16:2516 minutes, 25 secondsinteresting um bank account going over the email and we're looking at uh different
+16:3316 minutes, 33 secondsinformation it's giving us a summary it's telling us all the the hashes that we have inside the history of
+16:4116 minutes, 41 secondsinformation so now what we'll do is we'll just kind of see what was happening on the back end so we can kind of look at the state as well as what's
+16:5016 minutes, 50 secondsgoing on here so the first thing we can notice is we have our
+17:0017 minutesinput hash and we have our guarded history which is hashed so you can see this is
+17:0817 minutes, 8 secondsthe hashed information as well as this is the entire object of the history itself and then we have our map which is
+17:1817 minutes, 18 secondsthe current state of everything so it's holding on to all this information you can see it even recognized Social Security it thinks
+17:2617 minutes, 26 secondsthat's a name Main Street is a name instead of an address uh Jane do it got this time and then you can kind of see like some of the mistakes it was it was
+17:3517 minutes, 35 secondsmaking uh as far as like the hash I think this is probably so now what we're going to do is we're GNA actually look at this as to
+Chapter 7: LangSmith
+17:4317 minutes, 43 secondssee what happened in Lang Smith so if we go back to our browser and we look at lsmith we'll see that we have a new
+17:5017 minutes, 50 secondsrunnable sequence which is right here we can go ahead and look at this runnable sequence and we see that even the input
+17:5917 minutes, 59 secondsitself has the masked uh information as it's going into a runnable sequence the
+18:0618 minutes, 6 secondsnext piece is it goes into the into open Ai and you can see as it's going into our llm again it's sending in the masked
+18:1518 minutes, 15 secondsinformation so that the llm itself is not getting this information stored in a third party which is incredibly
+18:2218 minutes, 22 secondsimportant and then the output again is returning it's able to recognize that this these states are actually the
+18:3018 minutes, 30 secondsinformation the mass information which is why that we can rehydrate if we look at the the state
+18:3718 minutes, 37 secondsthat's being maintained in uh our map right here and this is how we can rehydrate is through this uh
+18:4618 minutes, 46 secondsinformation and so with that that's where uh the experimental branch is of or the experimental part of masking is
+18:5418 minutes, 54 secondsand uh if you're interested there is a way to I put all of this up on verell you can take a look and uh play with it
+Chapter 8: Conclusion
+19:0319 minutes, 3 secondsyourself all right that's it for us today don't forget to like And subscribe if you haven't already and remember that all the code you can get if you sign up
+19:1119 minutes, 11 secondsthrough the newsletter it'll give you access to the codebase as well as the versell link to test this out on your own I hope you enjoyed today's session
+19:1919 minutes, 19 secondswhere we covered masking specifically in Lan chain JS and then looked at how that information is actually passing through
+19:2619 minutes, 26 secondsthe runnable sequences in l Smith if you have any questions please leave them in the comments we'd love to hear from you and with that have a great one happy
+19:3419 minutes, 34 secondsnerding
