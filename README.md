@@ -167,7 +167,19 @@ For Layer 2 (Contextual NER), we chose **GLiNER** over Generative Small Language
 3. **Extreme Efficiency**: 10x smaller and faster than 3B-parameter SLMs.
 4. **Zero-Shot Flexibility**: Custom labels can be added in `pii_config.yaml` without fine-tuning.
 
-## 🗺️ Roadmap: Agentic Masking (2026 Frontier)
+## � Bug Fixes & Technical Improvements
+
+During rigorous testing with custom inputs and unstructured text, two significant edge cases were identified and resolved to ensure enterprise stability:
+
+### 1. The ID-Column Laplace Noise Bug
+- **The Issue**: Identifier columns (like `Tracking_Number`, `Account_Number`, `Pincode`) that lacked standard headers but contained purely numeric data were being automatically categorized as "continuous numerical variables". The pipeline applied Differential Privacy (Laplace noise) to these columns, mathematically scrambling critical IDs.
+- **The Solution**: We introduced a dynamic `is_id_like` string-matching heuristic in the column classification engine (`_classify_columns` in `core/pipeline.py`). By scanning the column headers for substrings like `id`, `num`, `code`, or `pin`, the pipeline now intelligently reroutes these columns to the Regex tier (categorical assignment) rather than subjecting them to continuous mathematical noise.
+
+### 2. The "Double-Masking" NER Collision Flaw
+- **The Issue**: When testing unstructured text containing deep identifiers (like a UPI ID `anj123@okhdfcbank`), the Regex Layer (Layer 1) correctly masked it into a visually authentic synthetic string like `zarna40@okhdfcbank`. However, the NER Layer (Layer 2 - GLiNER) ran immediately *after*, analyzing the *already mutated* text. GLiNER hallucinated that "zarna40" was a person and "okhdfcbank" was a company, re-masking the output into a mangled format like `Reyansh Baral@Sahni-Sood`.
+- **The Solution**: We completely refactored the pipeline logic (`_apply_ner_layer` and `mask_text` in `core/pipeline.py`) so that the advanced NER layer always scans the **raw, unmasked original strings** (e.g., `raw_df`) alongside the Regex engine. This prevents the AI from misidentifying Layer 1's synthetic data as real entities, eliminating the double-masking conflict and preserving clean, natural fake output.
+
+## �🗺️ Roadmap: Agentic Masking (2026 Frontier)
 We have published a research note in `RESEARCH/AGENTIC_MASKING_UPGRADE.md` detailing the next evolution of this project: **Role-Based Agentic Masking**. 
 *   **The Goal**: A middleware that adjusts masking strength (Data Scientist vs. Public Auditor) based on real-time "Need-to-Know" requirements.
 

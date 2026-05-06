@@ -123,7 +123,7 @@ class MaskingPipeline:
 
         # ----- PHASE 3: Layer 2 — GLiNER NER Scan + Mask -----
         if self.enable_ner and self.ner_scanner is not None:
-            masked_df, manifest = self._apply_ner_layer(masked_df, manifest, col_types)
+            masked_df, manifest = self._apply_ner_layer(masked_df, df, manifest, col_types)
 
         # ----- PHASE 4: Numeric Column Protection -----
         masked_df = self._protect_numeric_columns(masked_df, col_types)
@@ -133,7 +133,8 @@ class MaskingPipeline:
 
         # ----- PHASE 6: Layer 3 — Output Validation -----
         validator = OutputValidator(
-            max_passes=self.config.get("global", {}).get("max_validation_passes", 3)
+            max_passes=self.config.get("global", {}).get("max_validation_passes", 3),
+            use_ner=self.enable_ner
         )
         masked_df, manifest = validator.validate_dataframe(
             masked_df, manifest,
@@ -185,7 +186,9 @@ class MaskingPipeline:
                 col_types[col] = "numeric"
             else:
                 # Auto-detect: check if column is numeric
-                if pd.api.types.is_numeric_dtype(df[col]):
+                # Prevent ID-like columns (Tracking_Number, Account_Number) from being treated as continuous math variables
+                is_id_like = any(kw in col_lower for kw in ['id', 'number', 'num', 'code', 'pin', 'account'])
+                if pd.api.types.is_numeric_dtype(df[col]) and not is_id_like:
                     col_types[col] = "numeric"
                 else:
                     col_types[col] = "auto"  # Will use value-based detection
@@ -241,7 +244,7 @@ class MaskingPipeline:
                         detector=DetectorType.REGEX,
                         severity=Severity(match.severity),
                         column=col,
-                        row_index=int(idx),
+                        row_index=int(str(idx)),  # type: ignore
                     ))
                     detection_count += 1
 
@@ -253,8 +256,9 @@ class MaskingPipeline:
         return df, manifest
 
     def _validate_with_checksum(self, text: str, pattern_name: str) -> bool:
-        """Verify if a detected string passes its expected checksum (e.g. Luhn for CC)."""
-        if pattern_name == "credit_card":
+        """Verify if a detected string passes its expected checksum (e.g. Luhn for CC, Verhoeff for Aadhaar)."""
+        pattern_lower = pattern_name.lower()
+        if pattern_lower == "credit_card":
             # Remove non-digits
             digits = [int(d) for d in str(text) if d.isdigit()]
             if not digits: return False
@@ -268,6 +272,48 @@ class MaskingPipeline:
                     if d > 9: d -= 9
                 total += d
             return (total % 10 == 0)
+            
+        elif pattern_lower == "aadhaar":
+            # Remove non-digits
+            digits = [int(d) for d in str(text) if d.isdigit()]
+            if len(digits) != 12: return False
+            
+            # Verhoeff math tables
+            d_table = [
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [1, 2, 3, 4, 0, 6, 7, 8, 9, 5], [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+                [3, 4, 0, 1, 2, 8, 9, 5, 6, 7], [4, 0, 1, 2, 3, 9, 5, 6, 7, 8], [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+                [6, 5, 9, 8, 7, 1, 0, 4, 3, 2], [7, 6, 5, 9, 8, 2, 1, 0, 4, 3], [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+                [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+            ]
+            p_table = [
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [1, 5, 7, 6, 2, 8, 3, 0, 9, 4], [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+                [8, 9, 1, 6, 0, 4, 3, 5, 2, 7], [9, 4, 5, 3, 1, 2, 6, 8, 7, 0], [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+                [2, 7, 9, 3, 8, 0, 6, 4, 1, 5], [7, 0, 4, 6, 9, 1, 3, 2, 5, 8]
+            ]
+            
+            c = 0
+            for i, p in enumerate(reversed(digits)):
+                c = d_table[c][p_table[i % 8][p]]
+            return c == 0
+            
+        elif pattern_lower == "gstin":
+            if len(text) != 15: return False
+            alphanumeric = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            char_to_val = {char: i for i, char in enumerate(alphanumeric)}
+            factor = 1
+            total = 0
+            for char in text[:-1]:
+                if char not in char_to_val: return False
+                val = char_to_val[char]
+                digit = val * factor
+                digit = (digit // 36) + (digit % 36)
+                total += digit
+                factor = 2 if factor == 1 else 1
+            remainder = total % 36
+            checksum_val = (36 - remainder) % 36
+            expected_char = alphanumeric[checksum_val]
+            return text[-1].upper() == expected_char
+            
         return True # Default to True for other patterns
 
     # -----------------------------------------------------------------------
@@ -309,7 +355,7 @@ class MaskingPipeline:
                     detector=DetectorType.REGEX,  # Column-based detection
                     severity=Severity.HIGH,
                     column=col,
-                    row_index=int(idx),
+                    row_index=int(str(idx)),  # type: ignore
                 ))
                 detection_count += 1
                 df.at[idx, col] = replacement
@@ -324,7 +370,7 @@ class MaskingPipeline:
     # -----------------------------------------------------------------------
 
     def _apply_ner_layer(
-        self, df: pd.DataFrame, manifest: PIIManifest, col_types: Dict[str, str]
+        self, df: pd.DataFrame, raw_df: pd.DataFrame, manifest: PIIManifest, col_types: Dict[str, str]
     ) -> Tuple[pd.DataFrame, PIIManifest]:
         """Apply Layer 2 GLiNER NER to free-text and auto-detected columns."""
         
@@ -342,26 +388,32 @@ class MaskingPipeline:
 
         for col in ner_columns:
             detection_count = 0
-            for idx, value in df[col].items():
-                if pd.isna(value) or not isinstance(value, str) or not value.strip():
+            for idx, masked_val in df[col].items():
+                original_value = raw_df.at[idx, col]
+                if pd.isna(original_value) or not isinstance(original_value, str) or not original_value.strip():
                     continue
 
-                ner_matches = self.ner_scanner.scan_text(str(value))
+                # Scan the original text so we don't accidentally treat fake data from Layer 1 as real PII
+                ner_matches = self.ner_scanner.scan_text(str(original_value))
                 
                 if not ner_matches:
                     continue
 
                 # Pre-seed cache with longest matches first to ensure referential integrity
                 # e.g., 'Rajesh Sharma' is cached before 'rajesh'
-                masked_value = str(value)
+                masked_value = str(masked_val)
                 for match in sorted(ner_matches, key=lambda m: len(m.matched_text), reverse=True):
                     if match.matched_text in masked_value:
                         self.masker.mask(match.matched_text, match.faker_method)
 
                 # Replace each NER match (reverse order to preserve positions)
                 for match in sorted(ner_matches, key=lambda m: m.start, reverse=True):
+                    start, end = match.start, match.end
+                    if start < 0 or end <= start or end > len(masked_value):
+                        continue
+
                     # Skip if this text region was already masked by regex
-                    if match.matched_text not in masked_value:
+                    if masked_value[start:end] != str(original_value)[start:end]:
                         continue
 
                     # Route based on confidence thresholds
@@ -379,7 +431,7 @@ class MaskingPipeline:
 
                     if action in ("REDACTED", "REVIEW"):
                         replacement = self.masker.mask(match.matched_text, match.faker_method)
-                        masked_value = masked_value.replace(match.matched_text, replacement, 1)
+                        masked_value = masked_value[:start] + replacement + masked_value[end:]
                     else:
                         replacement = "[LOGGED_NOT_MASKED]"
                     
@@ -394,7 +446,7 @@ class MaskingPipeline:
                             self._ner_severity(match.entity_type)
                         ),
                         column=col,
-                        row_index=int(idx),
+                        row_index=int(str(idx)),  # type: ignore
                         action=action,
                     ))
                     detection_count += 1
@@ -517,15 +569,21 @@ class MaskingPipeline:
 
         # Layer 2: NER scan (if available)
         if self.enable_ner and self.ner_scanner and self.ner_scanner.is_available:
-            ner_matches = self.ner_scanner.scan_text(masked)
+            ner_matches = self.ner_scanner.scan_text(text)
             
             # Pre-seed cache with longest matches first to ensure referential integrity
             for match in sorted(ner_matches, key=lambda m: len(m.matched_text), reverse=True):
+                # We check `masked` because regex might have already masked it
                 if match.matched_text in masked:
                     self.masker.mask(match.matched_text, match.faker_method)
                     
             for match in sorted(ner_matches, key=lambda m: m.start, reverse=True):
-                if match.matched_text not in masked:
+                start, end = match.start, match.end
+                if start < 0 or end <= start or end > len(masked):
+                    continue
+
+                # Prevent replacing if layer 1 already hit this exact substring
+                if masked[start:end] != text[start:end]:
                     continue
                 # Route based on confidence thresholds
                 conf = match.confidence
@@ -542,7 +600,7 @@ class MaskingPipeline:
 
                 if action in ("REDACTED", "REVIEW"):
                     replacement = self.masker.mask(match.matched_text, match.faker_method)
-                    masked = masked.replace(match.matched_text, replacement, 1)
+                    masked = masked[:start] + replacement + masked[end:]
                 else:
                     replacement = "[LOGGED_NOT_MASKED]"
 

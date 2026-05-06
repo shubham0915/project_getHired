@@ -22,3 +22,4 @@ seaborn>=0.12
 # presidio-anonymizer
 # pyffx
 # spacy
+sentence-transformers>=2.2.0

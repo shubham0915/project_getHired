@@ -19,6 +19,7 @@ using Faker (en_IN locale). Key design principles:
 4. CONFIGURABLE: Faker methods are mapped to PII types via pii_config.yaml.
 """
 
+import os
 import random
 import string
 import hashlib
@@ -43,11 +44,11 @@ class PIIMasker:
     referential integrity across the dataset.
     """
 
-    def __init__(self, salt: str = "BL0STEM_HACK_2026"):
+    def __init__(self, salt: Optional[str] = None):
         # Session-level deterministic cache: original_value → masked_value
         self._cache: Dict[str, str] = {}
-        # Salt for cryptographic one-way seeding (Enterprise Standard)
-        self.salt = salt
+        # Pull salt from environment variable (Enterprise standard) to avoid hardcoding
+        self.salt = salt or os.getenv("MASKING_SALT", "BL0STEM_HACK_2026")
 
     def _get_seed(self, text: str) -> int:
         """Generate a deterministic seed from text using a salted SHA-256 hash."""
@@ -123,11 +124,13 @@ class PIIMasker:
             "passport": self._fake_passport,
             "vehicle_registration": self._fake_vehicle,
             "bank_account": self._fake_bank_account,
+            "gstin": self._fake_gstin,
             # GLiNER detected types
             "person": self._fake_name,
             "name": self._fake_name,
             "address": self._fake_address,
             "organization": self._fake_organization,
+            "obfuscate": self._obfuscate_format,
             "redact": self._redact,
         }
 
@@ -146,10 +149,33 @@ class PIIMasker:
         return f"{letters_first}{digits}{letter_last}"
 
     def _fake_aadhaar(self, original: str) -> str:
-        """Generate a realistic Aadhaar: 12 digits starting with 2-9"""
+        """Generate a realistic, mathematically valid Aadhaar (Verhoeff checksum)."""
+        # Generate first 11 digits (starts with 2-9)
         first = str(random.randint(2, 9))
-        rest = ''.join(random.choices(string.digits, k=11))
-        return f"{first}{rest}"
+        eleven_digits = f"{first}{''.join(random.choices(string.digits, k=10))}"
+        
+        # Verhoeff math tables for generating checksum
+        d_table = [
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [1, 2, 3, 4, 0, 6, 7, 8, 9, 5], [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+            [3, 4, 0, 1, 2, 8, 9, 5, 6, 7], [4, 0, 1, 2, 3, 9, 5, 6, 7, 8], [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+            [6, 5, 9, 8, 7, 1, 0, 4, 3, 2], [7, 6, 5, 9, 8, 2, 1, 0, 4, 3], [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+            [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+        ]
+        p_table = [
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [1, 5, 7, 6, 2, 8, 3, 0, 9, 4], [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+            [8, 9, 1, 6, 0, 4, 3, 5, 2, 7], [9, 4, 5, 3, 1, 2, 6, 8, 7, 0], [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+            [2, 7, 9, 3, 8, 0, 6, 4, 1, 5], [7, 0, 4, 6, 9, 1, 3, 2, 5, 8]
+        ]
+        inv_table = [0, 4, 3, 2, 1, 5, 6, 7, 8, 9]
+
+        c = 0
+        p = list(map(int, eleven_digits))
+        p.reverse()
+        for i, val in enumerate(p):
+            c = d_table[c][p_table[(i + 1) % 8][val]]
+        
+        check_digit = inv_table[c]
+        return f"{eleven_digits}{check_digit}"
 
     def _fake_ifsc(self, original: str) -> str:
         """Generate a realistic IFSC: ABCD0123456"""
@@ -209,6 +235,34 @@ class PIIMasker:
         """Generate a realistic bank account number (same length as original)."""
         length = len(original) if len(original) >= 9 else 12
         return ''.join(random.choices(string.digits, k=length))
+
+    def _fake_gstin(self, original: str) -> str:
+        """Generate a realistic, mathematically valid GSTIN (Modulo 36 checksum)."""
+        # State code (01-35)
+        state_code = str(random.randint(1, 35)).zfill(2)
+        # PAN (10 chars)
+        pan = self._fake_pan("")
+        # Entity code (1-9 or A-Z)
+        entity = random.choice("123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        # Default character is Z
+        gstin_14 = f"{state_code}{pan}{entity}Z"
+        
+        # Calculate 15th checksum digit
+        alphanumeric = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        char_to_val = {char: i for i, char in enumerate(alphanumeric)}
+        factor = 1
+        total = 0
+        for char in gstin_14:
+            val = char_to_val[char]
+            digit = val * factor
+            digit = (digit // 36) + (digit % 36)
+            total += digit
+            factor = 2 if factor == 1 else 1
+            
+        remainder = total % 36
+        checksum_val = (36 - remainder) % 36
+        
+        return f"{gstin_14}{alphanumeric[checksum_val]}"
 
     # -----------------------------------------------------------------------
     # Gender-Aware Indian Name Masking (Hybrid Approach)
@@ -324,6 +378,25 @@ class PIIMasker:
     def _fake_organization(self, original: str) -> str:
         """Generate a realistic company name."""
         return fake.company()
+
+    def _obfuscate_format(self, original: str) -> str:
+        """
+        Generic format-preserving obfuscation.
+        Replaces uppercase letters with random uppercase, lowercase with random lowercase,
+        and digits with random digits. Leaves special characters intact.
+        Perfect for identifiers like GSTIN, CIN, UDYAM, etc.
+        """
+        result = []
+        for char in original:
+            if char.isdigit():
+                result.append(random.choice(string.digits))
+            elif char.isupper():
+                result.append(random.choice(string.ascii_uppercase))
+            elif char.islower():
+                result.append(random.choice(string.ascii_lowercase))
+            else:
+                result.append(char)
+        return ''.join(result)
 
     def _redact(self, original: str) -> str:
         """Fallback: replace with a generic redaction marker."""

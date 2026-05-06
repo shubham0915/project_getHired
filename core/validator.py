@@ -50,6 +50,59 @@ class OutputValidator:
             except Exception as e:
                 logger.warning(f"NER scanner not available for validation: {e}")
 
+    @staticmethod
+    def _validate_with_checksum(text: str, pattern_name: str) -> bool:
+        """Verify if a detected string passes its expected checksum."""
+        pattern_lower = pattern_name.lower()
+        if pattern_lower == "credit_card":
+            digits = [int(d) for d in str(text) if d.isdigit()]
+            if not digits: return False
+            checksum = digits[-1]
+            payload = digits[:-1][::-1]
+            total = checksum
+            for i, d in enumerate(payload):
+                if i % 2 == 0:
+                    d *= 2
+                    if d > 9: d -= 9
+                total += d
+            return (total % 10 == 0)
+        elif pattern_lower == "aadhaar":
+            digits = [int(d) for d in str(text) if d.isdigit()]
+            if len(digits) != 12: return False
+            d_table = [
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [1, 2, 3, 4, 0, 6, 7, 8, 9, 5], [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+                [3, 4, 0, 1, 2, 8, 9, 5, 6, 7], [4, 0, 1, 2, 3, 9, 5, 6, 7, 8], [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+                [6, 5, 9, 8, 7, 1, 0, 4, 3, 2], [7, 6, 5, 9, 8, 2, 1, 0, 4, 3], [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+                [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+            ]
+            p_table = [
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [1, 5, 7, 6, 2, 8, 3, 0, 9, 4], [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+                [8, 9, 1, 6, 0, 4, 3, 5, 2, 7], [9, 4, 5, 3, 1, 2, 6, 8, 7, 0], [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+                [2, 7, 9, 3, 8, 0, 6, 4, 1, 5], [7, 0, 4, 6, 9, 1, 3, 2, 5, 8]
+            ]
+            c = 0
+            for i, p in enumerate(reversed(digits)):
+                c = d_table[c][p_table[i % 8][p]]
+            return c == 0
+        elif pattern_lower == "gstin":
+            if len(text) != 15: return False
+            alphanumeric = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            char_to_val = {char: i for i, char in enumerate(alphanumeric)}
+            factor = 1
+            total = 0
+            for char in text[:-1]:
+                if char not in char_to_val: return False
+                val = char_to_val[char]
+                digit = val * factor
+                digit = (digit // 36) + (digit % 36)
+                total += digit
+                factor = 2 if factor == 1 else 1
+            remainder = total % 36
+            checksum_val = (36 - remainder) % 36
+            expected_char = alphanumeric[checksum_val]
+            return text[-1].upper() == expected_char
+        return True
+
     def validate_dataframe(
         self, df: pd.DataFrame, manifest: PIIManifest, 
         skip_columns: List[str] = None,
@@ -90,7 +143,13 @@ class OutputValidator:
                     # Re-scan with regex
                     regex_matches = self.regex_scanner.scan_value(str(value), column_name=col)
                     
-                    for match in regex_matches:
+                    # Apply checksum filtering
+                    valid_matches = [
+                        m for m in regex_matches 
+                        if self._validate_with_checksum(m.matched_text, m.pattern_name)
+                    ]
+                    
+                    for match in sorted(valid_matches, key=lambda m: m.start, reverse=True):
                         # Check whitelist: if this matched text is a KNOWN masked value,
                         # it's an intentional synthetic replacement, not a leak.
                         if match.matched_text in whitelist:
@@ -98,7 +157,7 @@ class OutputValidator:
 
                         # This is an actual PII leak in the output! Mask it.
                         masked_replacement = self.masker.mask(match.matched_text, match.faker_method)
-                        value = value.replace(match.matched_text, masked_replacement)
+                        value = value[:match.start] + masked_replacement + value[match.end:]
                         whitelist.add(masked_replacement)  # Add new replacement to whitelist
                         pii_found_count += 1
                         types_found.add(match.pattern_name)
@@ -112,8 +171,32 @@ class OutputValidator:
                             detector=DetectorType.REGEX,
                             severity=Severity(match.severity),
                             column=col,
-                            row_index=int(idx),
+                            row_index=int(str(idx)),  # type: ignore
                         ))
+
+                    # Re-scan with NER
+                    if self.use_ner and self._ner_scanner and self._ner_scanner.is_available:
+                        ner_matches = self._ner_scanner.scan_text(str(value))
+                        for match in sorted(ner_matches, key=lambda m: m.start, reverse=True):
+                            if match.matched_text in whitelist:
+                                continue
+                            
+                            masked_replacement = self.masker.mask(match.matched_text, match.faker_method)
+                            value = value[:match.start] + masked_replacement + value[match.end:]
+                            whitelist.add(masked_replacement)
+                            pii_found_count += 1
+                            types_found.add(match.entity_type)
+                            
+                            manifest.add_detection(PIIDetection(
+                                entity_type=f"VALIDATION_{match.entity_type}",
+                                original_value="[REDACTED_FROM_LOG]",
+                                masked_value=masked_replacement,
+                                confidence=match.confidence,
+                                detector=DetectorType.GLINER,
+                                severity=Severity.HIGH,
+                                column=col,
+                                row_index=int(str(idx)),  # type: ignore
+                            ))
 
                     validated_df.at[idx, col] = value
 

@@ -67,6 +67,30 @@ def semantic_similarity(s1: str, s2: str) -> float:
     return len(intersection) / len(union)
 
 
+# Lazy-loaded HuggingFace sentence transformer model
+_st_model = None
+
+def get_hf_semantic_similarity(raw_texts, masked_texts) -> float:
+    """Calculates Semantic Utility using HuggingFace sentence-transformers."""
+    global _st_model
+    try:
+        from sentence_transformers import SentenceTransformer
+        import torch
+        import torch.nn.functional as F
+        
+        if _st_model is None:
+            # We use a fast, small model for real-time dashboard performance
+            _st_model = SentenceTransformer('all-MiniLM-L6-v2')
+            
+        embeddings1 = _st_model.encode(raw_texts, convert_to_tensor=True)
+        embeddings2 = _st_model.encode(masked_texts, convert_to_tensor=True)
+        cosine_scores = F.cosine_similarity(embeddings1, embeddings2)
+        return float(cosine_scores.mean().item())
+    except Exception as e:
+        print(f"HF Semantic Similarity Error: {e}")
+        return None
+
+
 def generate_quality_report(
     raw_df: pd.DataFrame, 
     masked_df: pd.DataFrame,
@@ -110,11 +134,17 @@ def generate_quality_report(
         percent_changed = (changed_count / total_values) * 100
         
         # Calculate Semantic Similarity for the column
+        raw_samples = [str(x) for x in raw_df[col].iloc[:100]]
+        masked_samples = [str(x) for x in masked_df[col].iloc[:100]]
+        
         similarities = [
-            semantic_similarity(str(r), str(m)) 
-            for r, m in zip(raw_df[col].iloc[:100], masked_df[col].iloc[:100])
+            semantic_similarity(r, m) 
+            for r, m in zip(raw_samples, masked_samples)
         ]
         avg_sim = np.mean(similarities) if similarities else 1.0
+        
+        # Calculate HF Semantic Similarity
+        hf_sim = get_hf_semantic_similarity(raw_samples, masked_samples) if raw_samples else 1.0
 
         total_pii_changed += changed_count
         total_pii_values += total_values
@@ -136,7 +166,8 @@ def generate_quality_report(
             "Action": action,
             "Values Changed": int(changed_count),
             "Effectiveness": f"{percent_changed:.1f}%",
-            "Semantic Utility": f"{avg_sim:.1%}"
+            "Semantic Utility": f"{avg_sim:.1%}",
+            "Semantic Utility (HF)": f"{hf_sim:.1%}" if hf_sim is not None else "Failed"
         })
     
     # --- Numeric Column Utility ---
@@ -168,7 +199,9 @@ def generate_quality_report(
             "Type": "Numeric (DP)",
             "Action": "Laplace Noise",
             "Values Changed": "All",
-            "Effectiveness": f"KS: {ks_stat:.3f} | JS: {js_div:.4f} | Utility: {col_utility:.1%}"
+            "Effectiveness": f"KS: {ks_stat:.3f} | JS: {js_div:.4f} | Utility: {col_utility:.1%}",
+            "Semantic Utility": "N/A",
+            "Semantic Utility (HF)": "N/A"
         })
     
     # --- Quasi-identifier Generalization ---
@@ -179,7 +212,9 @@ def generate_quality_report(
                 "Type": "Quasi-ID",
                 "Action": "Differential Privacy",
                 "Values Changed": len(raw_df),
-                "Effectiveness": "100.0% Protected"
+                "Effectiveness": "100.0% Protected",
+                "Semantic Utility": "N/A",
+                "Semantic Utility (HF)": "N/A"
             })
 
     if 'Pincode' in raw_df.columns and 'Pincode' in masked_df.columns:
@@ -190,7 +225,9 @@ def generate_quality_report(
                 "Type": "Quasi-ID",
                 "Action": "Synthetic Substitution",
                 "Values Changed": int(pincode_changed),
-                "Effectiveness": f"{pincode_changed/len(raw_df)*100:.1f}% Masked"
+                "Effectiveness": f"{pincode_changed/len(raw_df)*100:.1f}% Masked",
+                "Semantic Utility": "N/A",
+                "Semantic Utility (HF)": "N/A"
             })
 
     # --- Overall Scores ---
