@@ -132,9 +132,54 @@ class NERScanner:
             self._load_model()
         return self._model is not None
 
+    def _chunk_text(self, text: str, max_chars: int = 1200, overlap_chars: int = 250):
+        """
+        Splits text into chunks of roughly max_chars, ensuring we don't split words.
+        Returns a list of (chunk_string, global_start_offset).
+        """
+        chunks = []
+        text_len = len(text)
+        start = 0
+        
+        while start < text_len:
+            end = start + max_chars
+            if end >= text_len:
+                chunks.append((text[start:text_len], start))
+                break
+                
+            # Try to snap the end to a space or newline to avoid cutting words
+            boundary = text.rfind('\n', max(start, end - 100), end)
+            if boundary == -1:
+                boundary = text.rfind(' ', max(start, end - 100), end)
+                
+            if boundary != -1 and boundary > start:
+                end = boundary + 1
+                
+            chunks.append((text[start:end], start))
+            
+            # Move back by overlap_chars to start the next chunk
+            next_start = end - overlap_chars
+            # Snap next_start forward to a space/newline to avoid cutting a word
+            if next_start > start:
+                boundary_next = text.find('\n', next_start, end)
+                if boundary_next == -1:
+                    boundary_next = text.find(' ', next_start, end)
+                
+                if boundary_next != -1:
+                    next_start = boundary_next + 1
+            else:
+                next_start = end
+                
+            if next_start <= start:
+                next_start = end
+                
+            start = next_start
+            
+        return chunks
+
     def scan_text(self, text: str) -> List[NERMatch]:
         """
-        Scan free text for PII using GLiNER NER.
+        Scan free text for PII using GLiNER NER with a Sliding Window.
         
         Args:
             text: The text to scan (typically a free-text column value)
@@ -148,31 +193,51 @@ class NERScanner:
         if not self.is_available:
             return []
 
-        try:
-            entities = self._model.predict_entities(
-                text,
-                self._labels,
-                threshold=self._threshold
-            )
-        except Exception as e:
-            logger.error(f"GLiNER prediction failed: {e}")
-            return []
-
+        # 1. Chunk the text to bypass the 384-token limit
+        chunks = self._chunk_text(text, max_chars=1200, overlap_chars=250)
+        
         matches = []
-        for entity in entities:
-            label = entity.get("label", "unknown")
-            faker_method = GLINER_LABEL_TO_FAKER.get(label, "redact")
-            severity = GLINER_LABEL_SEVERITY.get(label, "MEDIUM")
+        added_spans = []
 
-            match = NERMatch(
-                entity_type=label,
-                matched_text=entity.get("text", ""),
-                start=entity.get("start", 0),
-                end=entity.get("end", 0),
-                confidence=entity.get("score", 0.0),
-                faker_method=faker_method,
-            )
-            matches.append(match)
+        for chunk_str, chunk_offset in chunks:
+            try:
+                entities = self._model.predict_entities(
+                    chunk_str,
+                    self._labels,
+                    threshold=self._threshold
+                )
+            except Exception as e:
+                logger.error(f"GLiNER prediction failed on chunk: {e}")
+                continue
+
+            for entity in entities:
+                global_start = chunk_offset + entity.get("start", 0)
+                global_end = chunk_offset + entity.get("end", 0)
+                
+                # 2. Deduplicate overlapping entities from different chunks
+                is_duplicate = False
+                for s, e in added_spans:
+                    if max(0, min(global_end, e) - max(global_start, s)) > 0:
+                        is_duplicate = True
+                        break
+                        
+                if is_duplicate:
+                    continue
+                    
+                added_spans.append((global_start, global_end))
+
+                label = entity.get("label", "unknown")
+                faker_method = GLINER_LABEL_TO_FAKER.get(label, "redact")
+
+                match = NERMatch(
+                    entity_type=label,
+                    matched_text=text[global_start:global_end],
+                    start=global_start,
+                    end=global_end,
+                    confidence=entity.get("score", 0.0),
+                    faker_method=faker_method,
+                )
+                matches.append(match)
 
         return matches
 

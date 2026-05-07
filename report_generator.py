@@ -15,6 +15,13 @@ import numpy as np
 from scipy.stats import ks_2samp, entropy
 from typing import Optional
 
+def calculate_k_anonymity(df, quasi_identifiers):
+    """Calculates k-anonymity for a given dataframe and quasi-identifiers."""
+    valid_cols = [c for c in quasi_identifiers if c in df.columns]
+    if not valid_cols or len(df) == 0:
+        return None
+    counts = df.groupby(valid_cols).size()
+    return int(counts.min())
 
 def kl_divergence(p, q):
     """Calculates KL divergence between two arrays of data by binning them."""
@@ -115,6 +122,10 @@ def generate_quality_report(
         "Privacy Score": 0.0,
         "Utility Score": 0.0,
     }
+    
+    quasi_ids = ['Age', 'Pincode', 'Gender']
+    report["k_anonymity_raw"] = calculate_k_anonymity(raw_df, quasi_ids)
+    report["k_anonymity_masked"] = calculate_k_anonymity(masked_df, quasi_ids)
     
     # --- PII Column Masking Effectiveness ---
     # Dynamically detect which columns changed (not hardcoded)

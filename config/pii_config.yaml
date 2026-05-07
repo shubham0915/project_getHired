@@ -34,10 +34,10 @@ regex_patterns:
   description: Credit/Debit Card Number (Visa, MC, Amex, Discover)
   faker_method: credit_card
 - name: EMAIL
-  pattern: \b[a-zA-Z0-9._%+\-]+\s*(?:@|\(at\)|\[at\])\s*[a-zA-Z0-9.\-]+\s*(?:\.|\(dot\)|\[dot\])\s*[a-zA-Z]{2,}\b
+  pattern: \b[a-zA-Z0-9_%+\-]+(?:(?:\.|(?:\s*(?:dot|\(dot\)|\[dot\])\s*))[a-zA-Z0-9_%+\-]+)*\s*(?:@|\(at\)|\[at\])\s*[a-zA-Z0-9\-]+(?:(?:\.|(?:\s*(?:dot|\(dot\)|\[dot\])\s*))[a-zA-Z]{2,7})?\b
   severity: MEDIUM
   category: CONTACT
-  description: Email Address including obfuscated formats like (at) and (dot)
+  description: Email Address including aggressively obfuscated formats
   faker_method: email
 - name: UPI_ID
   pattern: \b[a-zA-Z0-9.\-_]+@(?:ybl|paytm|okhdfcbank|okicici|apl|upi|ibl|axl)\b
@@ -154,6 +154,12 @@ regex_patterns:
   category: FINANCIAL
   description: SWIFT/BIC Code
   faker_method: obfuscate
+- name: ATTACHED_NAME
+  pattern: (?:[-_@:.,/])(?P<pii>[A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b
+  severity: HIGH
+  category: PERSONAL
+  description: Capitalized names immediately following punctuation that zero-shot models miss
+  faker_method: name
 gliner_labels:
 - person
 - phone number

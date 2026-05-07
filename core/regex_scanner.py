@@ -128,11 +128,20 @@ class RegexScanner:
 
             # Run regex
             for m in pattern["regex"].finditer(value):
+                try:
+                    matched_text = m.group("pii")
+                    start = m.start("pii")
+                    end = m.end("pii")
+                except IndexError:
+                    matched_text = m.group()
+                    start = m.start()
+                    end = m.end()
+
                 match_obj = RegexMatch(
                     pattern_name=pattern["name"],
-                    matched_text=m.group(),
-                    start=m.start(),
-                    end=m.end(),
+                    matched_text=matched_text,
+                    start=start,
+                    end=end,
                     severity=pattern["severity"],
                     category=pattern["category"],
                     faker_method=pattern["faker_method"],

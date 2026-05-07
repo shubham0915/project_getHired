@@ -1,6 +1,28 @@
 # 🛡️ Blostem Data Masking Pipeline v4
 
-Enterprise-grade, DPDP-compliant multi-layer PII detection and masking pipeline tailored for Indian fintech data.
+## 📖 Project Overview
+AI models require massive amounts of production data for fine-tuning, but strict privacy laws (like the DPDP Act and GDPR) prohibit the use of Personally Identifiable Information (PII). Traditional masking tools replace data with `[REDACTED]`, destroying the structural integrity and context of the data, making it useless for Machine Learning.
+
+This project is an **Enterprise-grade, Zero-Leakage Data Masking Pipeline**. It uses a multi-layered architecture—combining Mathematical Determinism (Regex + Checksums), Zero-Shot NLP (GLiNER), and Differential Privacy (Laplace Noise)—to create a safe **Digital Twin** of production data. This ensures 100% DPDP compliance while maintaining absolute statistical utility for AI training.
+
+👉 **[Read the Full Architecture Deep-Dive here (ARCHITECTURE.md)](ARCHITECTURE.md)**
+
+## 🖥️ Streamlit Dashboard
+*(Screenshots for Hackathon Judges - Add images here before final submission!)*
+* **Tab 1: Raw Data** - Inspect the generated unstructured fintech logs.
+* **Tab 2: Masked Data** - View the final output and export to CSV, Parquet, or JSONL for fine-tuning.
+* **Tab 4: Privacy vs Utility** - View k-Anonymity and distribution preservation metrics (KDE Plots).
+* **Tab 5: Leakage Auditor** - Run a simulated adversarial attack to prove zero leakage.
+
+## 🏆 How to Win Demo (3-Minute Pitch)
+1. **Show the Problem:** Open the Streamlit App and click "Generate Sample". Point out the messy, unstructured "Comments" column containing hidden Aadhaar numbers and names.
+2. **Run the Pipeline:** Click "Run Masking Pipeline" (Make sure GLiNER NER is enabled in the sidebar!).
+3. **Show the Result:** Go to Tab 2 and show how the messy unstructured text is perfectly masked into realistic synthetic data (e.g., Rajesh -> Sanjay).
+4. **Prove the Math:** Explain that your pipeline isn't just a basic Regex wrapper. Tell them how you implemented the **Verhoeff & Luhn Checksums** to prevent false positives!
+5. **Prove Zero Leakage:** Go to Tab 5 and show the Auditor simulating a reverse-engineering attack, proving 0 leaks.
+6. **Export to LLM:** Go back to Tab 2 and point out the "JSONL (LLM Fine-tuning)" export button to show that it is production-ready for Data Scientists.
+
+---
 
 ## 🌟 Key Features
 

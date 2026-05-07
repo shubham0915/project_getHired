@@ -116,10 +116,9 @@ class MaskingPipeline:
         masked_df, manifest = self._apply_regex_layer(masked_df, manifest, col_types)
 
         # ----- PHASE 2.5: Identity Column Fallback (Names) -----
-        # When GLiNER is unavailable, names have no regex pattern to catch them.
-        # This fallback ensures identity_columns (e.g. Name) are always masked
-        # using our gender-aware Indian name generator.
-        masked_df, manifest = self._apply_identity_fallback(masked_df, manifest, col_types)
+        # Only run fallback if NER is disabled to avoid conflicting masks
+        if not self.enable_ner or self.ner_scanner is None or not self.ner_scanner.is_available:
+            masked_df, manifest = self._apply_identity_fallback(masked_df, manifest, col_types)
 
         # ----- PHASE 3: Layer 2 — GLiNER NER Scan + Mask -----
         if self.enable_ner and self.ner_scanner is not None:
@@ -190,6 +189,8 @@ class MaskingPipeline:
                 is_id_like = any(kw in col_lower for kw in ['id', 'number', 'num', 'code', 'pin', 'account'])
                 if pd.api.types.is_numeric_dtype(df[col]) and not is_id_like:
                     col_types[col] = "numeric"
+                elif col_lower == 'pincode':
+                    col_types[col] = "skip"  # Skip Layer 1, handled in Phase 5
                 else:
                     col_types[col] = "auto"  # Will use value-based detection
 
@@ -406,14 +407,10 @@ class MaskingPipeline:
                     if match.matched_text in masked_value:
                         self.masker.mask(match.matched_text, match.faker_method)
 
-                # Replace each NER match (reverse order to preserve positions)
-                for match in sorted(ner_matches, key=lambda m: m.start, reverse=True):
-                    start, end = match.start, match.end
-                    if start < 0 or end <= start or end > len(masked_value):
-                        continue
-
-                    # Skip if this text region was already masked by regex
-                    if masked_value[start:end] != str(original_value)[start:end]:
+                # Replace each NER match (longest first to avoid partial replacements)
+                for match in sorted(ner_matches, key=lambda m: len(m.matched_text), reverse=True):
+                    # Check if the text still exists in masked_value (Regex might have modified it)
+                    if match.matched_text not in masked_value:
                         continue
 
                     # Route based on confidence thresholds
@@ -431,7 +428,8 @@ class MaskingPipeline:
 
                     if action in ("REDACTED", "REVIEW"):
                         replacement = self.masker.mask(match.matched_text, match.faker_method)
-                        masked_value = masked_value[:start] + replacement + masked_value[end:]
+                        # Replace in string to bypass offset shifts caused by Layer 1
+                        masked_value = masked_value.replace(match.matched_text, replacement)
                     else:
                         replacement = "[LOGGED_NOT_MASKED]"
                     
@@ -533,59 +531,34 @@ class MaskingPipeline:
     def mask_text(self, text: str) -> dict:
         """
         Mask PII in arbitrary free text (logs, comments, documents).
-        
-        Mentor quote: "Same will go for unstructured data where we have
-        thousands of GBs of logs."
-        
-        Uses backward processing (Research File 5: jftuga pattern) to
-        prevent position shifts when replacing PII spans.
-        
-        Args:
-            text: Raw text string containing potential PII
-            
-        Returns:
-            dict with 'masked_text', 'detections' list, and 'pii_count'
+        Uses exact offset mapping and overlap resolution to prevent position shifts.
         """
         if not text or not text.strip():
             return {"masked_text": text, "detections": [], "pii_count": 0}
 
-        detections = []
-        masked = text
+        all_matches = []
 
         # Layer 1: Regex scan
         matches = self.regex_scanner.scan_text(text)
-        
-        # Sort by position (reverse) to avoid offset shifts — Research File 5
-        for match in sorted(matches, key=lambda m: m.start, reverse=True):
-            replacement = self.masker.mask(match.matched_text, match.faker_method)
-            masked = masked[:match.start] + replacement + masked[match.end:]
-            detections.append({
-                "type": match.pattern_name,
-                "original": match.matched_text[:4] + "***",  # Partial for safety
-                "replacement": replacement,
-                "severity": match.severity,
-                "detector": "REGEX",
+        for match in matches:
+            if not self._validate_with_checksum(match.matched_text, match.pattern_name):
+                continue
+            all_matches.append({
+                "start": match.start, "end": match.end, "text": match.matched_text,
+                "type": match.pattern_name, "severity": match.severity,
+                "detector": "REGEX", "faker_method": match.faker_method,
+                "confidence": 1.0, "action": "REDACTED", "priority": 0
             })
 
         # Layer 2: NER scan (if available)
         if self.enable_ner and self.ner_scanner and self.ner_scanner.is_available:
             ner_matches = self.ner_scanner.scan_text(text)
             
-            # Pre-seed cache with longest matches first to ensure referential integrity
+            # Pre-seed cache to ensure referential integrity
             for match in sorted(ner_matches, key=lambda m: len(m.matched_text), reverse=True):
-                # We check `masked` because regex might have already masked it
-                if match.matched_text in masked:
-                    self.masker.mask(match.matched_text, match.faker_method)
+                self.masker.mask(match.matched_text, match.faker_method)
                     
-            for match in sorted(ner_matches, key=lambda m: m.start, reverse=True):
-                start, end = match.start, match.end
-                if start < 0 or end <= start or end > len(masked):
-                    continue
-
-                # Prevent replacing if layer 1 already hit this exact substring
-                if masked[start:end] != text[start:end]:
-                    continue
-                # Route based on confidence thresholds
+            for match in ner_matches:
                 conf = match.confidence
                 route_cfg = self.config.get("confidence_routing", {})
                 auto_redact = route_cfg.get("auto_redact", 0.8)
@@ -598,20 +571,45 @@ class MaskingPipeline:
                 else:
                     action = "LOG_ONLY"
 
-                if action in ("REDACTED", "REVIEW"):
-                    replacement = self.masker.mask(match.matched_text, match.faker_method)
-                    masked = masked[:start] + replacement + masked[end:]
-                else:
-                    replacement = "[LOGGED_NOT_MASKED]"
-
-                detections.append({
-                    "type": match.entity_type,
-                    "original": match.matched_text[:4] + "***",
-                    "replacement": replacement,
-                    "severity": "HIGH",
-                    "detector": "GLINER",
-                    "action": action,
+                all_matches.append({
+                    "start": match.start, "end": match.end, "text": match.matched_text,
+                    "type": match.entity_type, "severity": getattr(match, '_severity', "HIGH"),
+                    "detector": "GLINER", "faker_method": match.faker_method,
+                    "confidence": match.confidence, "action": action, "priority": 1
                 })
+
+        # Resolve Overlaps: Sort by priority (Regex first), then length (longest first)
+        all_matches.sort(key=lambda x: (x["priority"], -(x["end"] - x["start"])))
+        used = [False] * len(text)
+        resolved_matches = []
+
+        for m in all_matches:
+            start, end = m["start"], m["end"]
+            if not any(used[start:end]):
+                for i in range(start, end):
+                    used[i] = True
+                resolved_matches.append(m)
+
+        # Apply Replacements Backward to prevent offset shifts
+        resolved_matches.sort(key=lambda x: x["start"], reverse=True)
+        masked = text
+        detections = []
+
+        for m in resolved_matches:
+            if m["action"] in ("REDACTED", "REVIEW"):
+                replacement = self.masker.mask(m["text"], m["faker_method"])
+                masked = masked[:m["start"]] + replacement + masked[m["end"]:]
+            else:
+                replacement = "[LOGGED_NOT_MASKED]"
+
+            detections.append({
+                "type": m["type"],
+                "original": m["text"][:4] + "***",
+                "replacement": replacement,
+                "severity": m["severity"],
+                "detector": m["detector"],
+                "action": m["action"],
+            })
 
         return {
             "masked_text": masked,
