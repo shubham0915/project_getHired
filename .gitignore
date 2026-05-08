@@ -8,5 +8,8 @@ env/
 .env
 .DS_Store
 *.csv
+debug.py
+test_output.py
+details/
 # Research files are now tracked for hackathon visibility
 # RESEARCH/
