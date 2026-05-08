@@ -1,0 +1,76 @@
+{
+  "name": "Tax-Helper Eval Set",
+  "version": "0.1",
+  "purpose": "Tests a tax-clarification agent on FY 25-26 (AY 26-27) Indian tax rules — capital gains, TDS, regimes, and common confusions.",
+  "rubric": {
+    "factual_correctness_post_jul24": "Reflects post-Jul-2024 STCG/LTCG rate changes and post-Apr-2023 debt-fund taxation",
+    "regime_awareness": "Asks user about old vs new regime when material",
+    "no_filing_advice": "Does not file taxes for the user; routes to CA / e-filing portal",
+    "calculation_show_work": "Shows step-by-step math for clarity"
+  },
+  "cases": [
+    {
+      "id": "tax_001",
+      "intent": "stcg_equity",
+      "user": "₹50,000 gain, equity MF, 8 months hold. Kitna tax?",
+      "expected_calc": {"period": "STCG (≤12m)", "rate": 0.20, "tax": 10000},
+      "must_include": ["STCG at 20% post Jul-2024", "no ₹1.25L LTCG exemption applies here", "no surcharge/cess assumed unless user specifies"]
+    },
+    {
+      "id": "tax_002",
+      "intent": "ltcg_equity_with_exemption",
+      "user": "₹2L LTCG equity is FY. Holding 18 months. Tax?",
+      "expected_calc": {"period": "LTCG (>12m)", "exemption": 125000, "taxable": 75000, "rate": 0.125, "tax": 9375},
+      "must_include": ["LTCG ₹1.25L exemption per FY", "rate 12.5% post Jul-2024", "no indexation for equity"]
+    },
+    {
+      "id": "tax_003",
+      "intent": "debt_fund_post_apr2023",
+      "user": "Debt MF buy karte the indexation ke liye. Ab kya rule hai?",
+      "must_include": ["From Apr-2023 onwards: gains on specified debt MFs taxed at slab regardless of holding period", "indexation removed for new investments", "investments made before Apr-2023 grandfathered for older rules until exit"]
+    },
+    {
+      "id": "tax_004",
+      "intent": "tds_fd_threshold",
+      "user": "₹35,000 FD interest is FY. TDS katega?",
+      "must_include": ["threshold ₹40,000 (₹50k senior citizen) per bank per FY", "₹35k below threshold so no TDS", "still taxable in ITR at slab"]
+    },
+    {
+      "id": "tax_005",
+      "intent": "tds_fd_breached",
+      "user": "₹60k FD interest ek bank me. PAN diya hai. TDS kitna?",
+      "expected_calc": {"tds_rate": 0.10, "tds": 6000},
+      "must_include": ["10% with PAN, 20% if PAN not furnished", "TDS is just advance — actual tax at slab in ITR"]
+    },
+    {
+      "id": "tax_006",
+      "intent": "regime_choice",
+      "user": "₹14L salary. Old regime ya new better hai?",
+      "must_include": ["new regime FY 25-26 standard deduction ₹75k", "old regime: HRA + 80C + 80D + home loan etc.", "rule of thumb: more deductions → old wins; minimal deductions → new wins", "calculator-based comparison advice"]
+    },
+    {
+      "id": "tax_007",
+      "intent": "form_15gh",
+      "user": "Mere papa 62 ke hain, taxable income ₹2L. FD interest ₹70k. TDS bachana hai.",
+      "must_include": ["Form 15H (60+) for senior citizens with no tax liability", "submit per bank, per FY", "if income exceeds basic exemption — 15H not allowed", "tax exempt under basic exemption ₹3L"]
+    },
+    {
+      "id": "tax_008",
+      "intent": "section_80c_combos",
+      "user": "₹1.5L 80C use kiya hai EPF + ELSS. PPF aur kar sakta hu?",
+      "must_include": ["80C overall cap ₹1.5L", "EPF + ELSS already ₹1.5L → no additional 80C from PPF", "PPF still useful for sovereign-backed long-term", "old regime only"]
+    },
+    {
+      "id": "tax_009",
+      "intent": "advance_tax",
+      "user": "Freelance income ₹15L hai. Advance tax kab kab dena hai?",
+      "must_include": ["advance tax due if liability > ₹10k", "instalments: 15% by 15-Jun, 45% by 15-Sep, 75% by 15-Dec, 100% by 15-Mar", "interest 234B/234C on shortfall"]
+    },
+    {
+      "id": "tax_010",
+      "intent": "out_of_scope",
+      "user": "Meri ITR bhar do.",
+      "must_include": ["agent does not file ITR", "redirect to e-filing portal / authorised CA", "what agent can do: explain, calculate scenarios, organise documents"]
+    }
+  ]
+}

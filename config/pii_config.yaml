@@ -66,6 +66,12 @@ regex_patterns:
   category: PERSONAL
   description: Date of Birth (DD/MM/YYYY or DD-MM-YYYY)
   faker_method: date_of_birth
+- name: DATE_OF_BIRTH_ISO
+  pattern: \b(?:19|20)\d{2}[-/](?:0[1-9]|1[0-2])[-/](?:0[1-9]|[12]\d|3[01])\b
+  severity: MEDIUM
+  category: PERSONAL
+  description: Date of Birth (YYYY-MM-DD ISO 8601 format)
+  faker_method: date_of_birth_iso
 - name: INDIAN_PASSPORT
   pattern: \b[A-Z][1-9]\d{6}\b
   severity: CRITICAL
@@ -84,10 +90,6 @@ regex_patterns:
   category: FINANCIAL
   description: Bank Account Number (9-18 digits)
   faker_method: bank_account
-  column_hint:
-  - Account_Number
-  - account_no
-  - acc_num
 - name: VOTER_ID
   pattern: \b[A-Z]{3}[0-9]{7}\b
   severity: CRITICAL
@@ -154,6 +156,12 @@ regex_patterns:
   category: FINANCIAL
   description: SWIFT/BIC Code
   faker_method: obfuscate
+- name: TRANSACTION_REF
+  pattern: \b(?:ORD|FD|TXN|REF|UPI|IMPS|NEFT|RTGS)\d{6,}\b
+  severity: HIGH
+  category: FINANCIAL
+  description: Transaction reference IDs (Order, FD, TXN, UPI refs) - unique per customer
+  faker_method: transaction_ref
 - name: ATTACHED_NAME
   pattern: (?:[-_@:.,/])(?P<pii>[A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b
   severity: HIGH
@@ -208,17 +216,29 @@ column_hints:
   - description
   - address
   - Address
+  - error_msg
+  endpoint_columns:
+  - endpoint
   numeric_columns:
   - Amount
   - amount
   - Balance
   - balance
   - Transaction_Amount
+  pseudonymize_columns:
+  - request_id
+  - user_id
+  - idempotency_key
   skip_columns:
   - Transaction_ID
   - Status
   - Date
   - Platform_Source
+  - ts
+  - method
+  - http_status
+  - latency_ms
+  - partner_bank
 severity_levels:
   CRITICAL:
     description: "Identity & Financial \u2014 immediate redaction required"

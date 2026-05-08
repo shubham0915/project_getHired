@@ -18,7 +18,8 @@ masker to distinguish "intentional synthetic value" from "PII leak".
 
 import pandas as pd
 import logging
-from typing import Tuple, List, Dict, Set
+import re
+from typing import Tuple, List, Dict, Set, Iterable
 
 from core.regex_scanner import RegexScanner
 from core.masker import PIIMasker
@@ -51,7 +52,7 @@ class OutputValidator:
                 logger.warning(f"NER scanner not available for validation: {e}")
 
     @staticmethod
-    def _validate_with_checksum(text: str, pattern_name: str) -> bool:
+    def _validate_with_checksum(text: str, pattern_name: str, column_type: str = "auto") -> bool:
         """Verify if a detected string passes its expected checksum."""
         pattern_lower = pattern_name.lower()
         if pattern_lower == "credit_card":
@@ -67,6 +68,8 @@ class OutputValidator:
                 total += d
             return (total % 10 == 0)
         elif pattern_lower == "aadhaar":
+            if column_type in ("free_text", "auto"):
+                return True
             digits = [int(d) for d in str(text) if d.isdigit()]
             if len(digits) != 12: return False
             d_table = [
@@ -106,7 +109,8 @@ class OutputValidator:
     def validate_dataframe(
         self, df: pd.DataFrame, manifest: PIIManifest, 
         skip_columns: List[str] = None,
-        known_masked_values: Set[str] = None
+        known_masked_values: Set[str] = None,
+        col_types: Dict[str, str] = None
     ) -> Tuple[pd.DataFrame, PIIManifest]:
         """
         Run iterative validation passes on the masked DataFrame.
@@ -124,6 +128,7 @@ class OutputValidator:
         """
         skip = set(skip_columns or [])
         whitelist = known_masked_values or set()
+        col_types = col_types or {}
         validated_df = df.copy()
 
         for pass_num in range(1, self.max_passes + 1):
@@ -146,8 +151,20 @@ class OutputValidator:
                     # Apply checksum filtering
                     valid_matches = [
                         m for m in regex_matches 
-                        if self._validate_with_checksum(m.matched_text, m.pattern_name)
+                        if self._validate_with_checksum(m.matched_text, m.pattern_name, col_types.get(col, "auto"))
                     ]
+
+                    # Skip noisy low-severity patterns in free-text/auto columns.
+                    # These produce excessive false positives (amounts as PINCODE,
+                    # ticket IDs as VOTER_ID, hyphenated words as ATTACHED_NAME).
+                    # The validator focuses on HIGH-severity leaks only.
+                    _VALIDATOR_SKIP_PATTERNS = {"INDIAN_PINCODE", "VOTER_ID", "ATTACHED_NAME"}
+                    ctype = col_types.get(col, "auto")
+                    if ctype in ("free_text", "auto"):
+                        valid_matches = [
+                            m for m in valid_matches
+                            if m.pattern_name not in _VALIDATOR_SKIP_PATTERNS
+                        ]
                     
                     for match in sorted(valid_matches, key=lambda m: m.start, reverse=True):
                         # Check whitelist: if this matched text is a KNOWN masked value,
@@ -177,16 +194,30 @@ class OutputValidator:
                     # Re-scan with NER
                     if self.use_ner and self._ner_scanner and self._ner_scanner.is_available:
                         ner_matches = self._ner_scanner.scan_text(str(value))
-                        for match in sorted(ner_matches, key=lambda m: m.start, reverse=True):
-                            if match.matched_text in whitelist:
+
+                        # Build spans for known masked values to avoid double-masking
+                        masked_spans = []
+                        for masked_val in whitelist:
+                            if not masked_val:
                                 continue
-                            
+                            for m in re.finditer(re.escape(masked_val), value):
+                                masked_spans.append((m.start(), m.end()))
+
+                        for match in sorted(ner_matches, key=lambda m: m.start, reverse=True):
+                            start, end = match.start, match.end
+                            if start < 0 or end <= start or end > len(value):
+                                continue
+
+                            # Skip if the detected span overlaps any known masked value
+                            if any(start < ms_end and end > ms_start for ms_start, ms_end in masked_spans):
+                                continue
+
                             masked_replacement = self.masker.mask(match.matched_text, match.faker_method)
-                            value = value[:match.start] + masked_replacement + value[match.end:]
+                            value = value[:start] + masked_replacement + value[end:]
                             whitelist.add(masked_replacement)
                             pii_found_count += 1
                             types_found.add(match.entity_type)
-                            
+
                             manifest.add_detection(PIIDetection(
                                 entity_type=f"VALIDATION_{match.entity_type}",
                                 original_value="[REDACTED_FROM_LOG]",

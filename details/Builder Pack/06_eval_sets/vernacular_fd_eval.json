@@ -1,0 +1,132 @@
+{
+  "name": "Vernacular FD Agent Eval Set",
+  "version": "0.1",
+  "purpose": "Tests an FD-focused conversational agent across language, intent, edge cases, and compliance. Use as a fixed regression suite — agent output is graded by an LLM-as-judge or human reviewer against the rubric.",
+  "rubric": {
+    "factual_correctness": "Are quoted rates, tenors, DICGC limits, TDS thresholds correct?",
+    "compliance": "Did the agent disclose DICGC / partner-bank / past-performance disclaimers when required?",
+    "language_match": "Did the agent respond in the same language as the user query (and code-mix appropriately)?",
+    "no_hallucinated_advice": "Agent should NOT recommend a specific bank/scheme as 'best'. Agent SHOULD describe trade-offs.",
+    "tone": "Warm, non-condescending, no jargon-dumping unless user asks."
+  },
+  "cases": [
+    {
+      "id": "vf_001",
+      "lang": "hi",
+      "intent": "compare_rates",
+      "user": "Konsa bank sabse zyada FD interest deta hai 2 saal ke liye?",
+      "must_include": ["DICGC ₹5L disclosure", "rate varies across banks/SFBs", "no specific bank recommendation"],
+      "must_not_include": ["specific bank named as 'best'"]
+    },
+    {
+      "id": "vf_002",
+      "lang": "hi",
+      "intent": "safety_doubt",
+      "user": "Equitas Small Finance Bank me 8.5% mil raha hai 3 saal ke liye. Yeh safe hai?",
+      "must_include": ["SFB is RBI-licensed", "DICGC up to ₹5L per depositor per bank", "diversification suggestion if amount exceeds ₹5L"],
+      "must_not_include": ["it's 100% safe", "guaranteed"]
+    },
+    {
+      "id": "vf_003",
+      "lang": "ta",
+      "intent": "vernacular_request",
+      "user": "Saar, Tamil la pesinaa nalla irukum. FD nu sonna enna nu purila. ₹50000 ku enna investment pannanum 1 year la?",
+      "must_include": ["Tamil response", "FD definition in plain Tamil", "1-year tenor mention", "DICGC mention in Tamil"],
+      "must_not_include": ["English-only response", "jargon without translation"]
+    },
+    {
+      "id": "vf_004",
+      "lang": "en",
+      "intent": "tax_clarification",
+      "user": "I'm in 30% slab. ₹3L FD at 7.5% for 1 year. Will TDS be deducted? How much net interest do I actually get?",
+      "expected_calc": {
+        "gross_interest": 22500.00,
+        "tds_threshold_breached": false,
+        "tds_amount_if_breached_at_10pct": 2250,
+        "net_interest_if_no_tds": 22500.00,
+        "tax_on_full_disclosure_in_ITR_at_30pct": 6750
+      },
+      "must_include": ["TDS threshold ₹40k explanation", "interest is taxable at slab in ITR regardless of TDS", "Form 15G/15H mention"]
+    },
+    {
+      "id": "vf_005",
+      "lang": "hi",
+      "intent": "emotional_panic",
+      "user": "Mera 5 saal ka FD hai HDFC me, kal news me dekha ki bank fail ho sakte hain. Paisa nikaal lu?",
+      "must_include": ["empathy / acknowledgement", "factual on DICGC ₹5L cover", "HDFC is a scheduled commercial bank", "premature withdrawal trade-off explanation"],
+      "must_not_include": ["financial advice to withdraw or hold", "alarmist language"]
+    },
+    {
+      "id": "vf_006",
+      "lang": "hi",
+      "intent": "senior_citizen_special",
+      "user": "Mere papa 65 ke hain. ₹15 lakh hai. Sabse achhi monthly income kahan milegi?",
+      "must_include": ["SCSS option (₹30L cap, govt-backed)", "senior citizen FD rate uplift", "monthly-payout FD option", "diversification across SCSS + FD + liquid"],
+      "must_not_include": ["pick one product as 'best'"]
+    },
+    {
+      "id": "vf_007",
+      "lang": "bn",
+      "intent": "procedural_help",
+      "user": "Ami amar FD bhangte chai medical emergency-r jonno. Kotota penalty?",
+      "must_include": ["Bengali response", "premature withdrawal allowed for individuals", "penalty calculation example", "settlement T+2 working days mention"]
+    },
+    {
+      "id": "vf_008",
+      "lang": "hinglish",
+      "intent": "compare_rates",
+      "user": "Bhai ₹10L hai. FD vs liquid fund vs Arbitrage fund — 6 months ke liye, post-tax kya better hai 30% slab pe?",
+      "must_include": ["FD interest taxed at slab; liquid fund post-Apr-2023 also slab; arbitrage fund equity-taxed (STCG 20%)", "post-tax comparison table or numbers", "liquidity comparison"]
+    },
+    {
+      "id": "vf_009",
+      "lang": "hi",
+      "intent": "regulatory_status",
+      "user": "Aapka app SEBI registered hai? RBI ka licence hai?",
+      "must_include": ["plainly state your regulatory status", "partner-bank name disclosure", "DICGC coverage applies via partner bank", "grievance redressal path"]
+    },
+    {
+      "id": "vf_010",
+      "lang": "hi",
+      "intent": "complaint",
+      "user": "VKYC 3 baar fail ho gaya. Camera open tha, light bhi thi. Ab kya karu?",
+      "must_include": ["empathy", "checklist of common VKYC fix-its (lighting, original PAN not laminated, app permissions)", "queue-time alternative", "escalation contact"],
+      "must_not_include": ["dismissive language", "blame the user"]
+    },
+    {
+      "id": "vf_011",
+      "lang": "hi",
+      "intent": "compare_rates",
+      "user": "Bhai abhi 31 March hai. Tax saver FD karu ya ELSS? 80C bachana hai ₹1.5L.",
+      "must_include": ["Tax-saver FD: 5y lockin, interest taxable, no equity upside", "ELSS: 3y lockin, equity-linked, market risk, LTCG taxation", "trade-off framing not recommendation", "deadline reality check"]
+    },
+    {
+      "id": "vf_012",
+      "lang": "kn",
+      "intent": "product_definition",
+      "user": "Sir, Kannada-alli explain madi. FD ladder antha keli idini, idu enna?",
+      "must_include": ["Kannada response", "FD ladder = splitting amount across multiple tenors", "rolls over annually for liquidity + rate-cycle averaging", "simple example with ₹1L split into 5 x ₹20k FDs"]
+    },
+    {
+      "id": "vf_013",
+      "lang": "en",
+      "intent": "edge_case",
+      "user": "If a partner bank goes bust and DICGC pays out ₹5L, do I get the interest accrued too or only principal?",
+      "must_include": ["DICGC covers principal + interest combined up to ₹5L", "interest accrued till date of bank failure is included in the cover", "anything above ₹5L becomes a creditor claim on the bank's resolution"]
+    },
+    {
+      "id": "vf_014",
+      "lang": "hi",
+      "intent": "edge_case",
+      "user": "Mere 4 different banks me FD hai, har ek me 4-4 lakh. Total ₹16L. Sab DICGC me cover hai na?",
+      "must_include": ["Yes, ₹5L cover is per depositor per bank", "₹4L < ₹5L per bank, so all four are individually within cover", "if any one bank also has SB/RD balance, that aggregates with FD"]
+    },
+    {
+      "id": "vf_015",
+      "lang": "hi",
+      "intent": "non_fd_attempted",
+      "user": "Mujhe SIF me invest karna hai ₹20 lakh ka. Aapke paas hai?",
+      "must_include": ["acknowledge query", "scope: agent is FD-focused", "polite handoff to human / other product line", "no fabricated SIF rates"]
+    }
+  ]
+}

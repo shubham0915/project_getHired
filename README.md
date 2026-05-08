@@ -47,7 +47,7 @@ This project is an **Enterprise-grade, Zero-Leakage Data Masking Pipeline**. It 
    - **Smart Type Preservation**: Detects Integers vs Floats to prevent "19.21 year old" artifacts.
 
 6. **Content-First, Schema-Agnostic Processing**:
-   - The pipeline does not blindly trust column headers. Irrelevant column names (like `col_4`) are automatically analyzed based on their content. If they contain pure numbers, they receive Differential Privacy. If they contain text, they are scanned by Regex and GLiNER to uncover hidden PII.
+   - The pipeline does **not** trust column headers. Classification is driven by **sampling actual cell values** and probing them with regex to measure PII density, cardinality, and average string length. A column named `col_A` containing PANs is detected and masked; a column named `Name` containing categorical data is auto-skipped. YAML column hints are demoted to soft tiebreakers — the only hard overrides are operational directives like `pseudonymize_columns`.
 
 7. **Quasi-Identifier Protection (LLM-Optimized)**:
    - `Age` is protected using Differential Privacy (Laplace noise) rounded to the nearest integer. This maintains perfect natural age distributions instead of clunky text bands.

@@ -23,6 +23,7 @@ import os
 import random
 import string
 import hashlib
+import hmac
 import pandas as pd
 from typing import Dict, Optional, Any
 from faker import Faker
@@ -112,6 +113,7 @@ class PIIMasker:
         fake.seed_instance(seed)
 
         generators = {
+            "hash": self._hash_token,
             "pan": self._fake_pan,
             "aadhaar": self._fake_aadhaar,
             "ifsc": self._fake_ifsc,
@@ -121,9 +123,11 @@ class PIIMasker:
             "email": self._fake_email,
             "pincode": self._fake_pincode,
             "date_of_birth": self._fake_dob,
+            "date_of_birth_iso": self._fake_dob_iso,
             "passport": self._fake_passport,
             "vehicle_registration": self._fake_vehicle,
             "bank_account": self._fake_bank_account,
+            "transaction_ref": self._fake_transaction_ref,
             "gstin": self._fake_gstin,
             # GLiNER detected types
             "person": self._fake_name,
@@ -209,12 +213,20 @@ class PIIMasker:
         return str(random.randint(110001, 855117))
 
     def _fake_dob(self, original: str) -> str:
-        """Generate a realistic DOB in same format."""
+        """Generate a realistic DOB in same format as original."""
         dob = fake.date_of_birth(minimum_age=18, maximum_age=80)
         # Detect format from original
         if "/" in original:
             return dob.strftime("%d/%m/%Y")
+        # Check if it's ISO format (YYYY-MM-DD) — first 4 chars are year
+        if len(original) >= 10 and original[:4].isdigit() and original[4] == '-':
+            return dob.strftime("%Y-%m-%d")
         return dob.strftime("%d-%m-%Y")
+
+    def _fake_dob_iso(self, original: str) -> str:
+        """Generate a realistic DOB in ISO 8601 format (YYYY-MM-DD)."""
+        dob = fake.date_of_birth(minimum_age=18, maximum_age=80)
+        return dob.strftime("%Y-%m-%d")
 
     def _fake_passport(self, original: str) -> str:
         """Generate a realistic Indian passport number."""
@@ -235,6 +247,21 @@ class PIIMasker:
         """Generate a realistic bank account number (same length as original)."""
         length = len(original) if len(original) >= 9 else 12
         return ''.join(random.choices(string.digits, k=length))
+
+    def _fake_transaction_ref(self, original: str) -> str:
+        """Generate a synthetic transaction reference ID preserving prefix format.
+        
+        ORD1248848721 → ORD + 10 random digits
+        FD38802228    → FD + 8 random digits
+        """
+        import re as _re
+        m = _re.match(r'^([A-Z]+)(\d+)$', original)
+        if m:
+            prefix = m.group(1)
+            digit_len = len(m.group(2))
+            return f"{prefix}{''.join(random.choices(string.digits, k=digit_len))}"
+        # Fallback: obfuscate entire string
+        return self._obfuscate_format(original)
 
     def _fake_gstin(self, original: str) -> str:
         """Generate a realistic, mathematically valid GSTIN (Modulo 36 checksum)."""
@@ -355,21 +382,55 @@ class PIIMasker:
     def _fake_name(self, original: str) -> str:
         """
         Generate a gender-preserving, authentically Indian name.
-
-        Hybrid approach:
-        - First name: from curated Indian lists (guarantees gender + Indian)
-        - Surname:    from Faker en_IN last_name() (517+ unique Indian surnames)
-        - Pool:       ~25,850 unique combos per gender (scales to production)
+        
+        WORD-COUNT AWARE:
+        - 1 word input → single-word output (first name OR surname)
+        - 2+ word input → "First Last" output
+        
+        Detects whether a single word is a first name or surname by
+        checking against the curated lists. This ensures:
+        - "Gaurav" → "Rakesh"  (not "Rakesh Patel")
+        - "Verma"  → "Sharma"  (not "Priya Sharma")
+        - "Gaurav Verma" → "Rakesh Sharma"
         """
+        word_count = len(original.strip().split())
         gender = self._infer_gender(original)
-        if gender == 'F':
-            first = random.choice(self._INDIAN_FEMALE_FIRST)
-        elif gender == 'M':
-            first = random.choice(self._INDIAN_MALE_FIRST)
+
+        if word_count <= 1:
+            # Single word — is it a first name or a surname?
+            original_lower = original.strip().lower()
+
+            # Check if it's a known surname
+            from core.pipeline import MaskingPipeline
+            is_surname = original_lower in {
+                s.lower() if isinstance(s, str) else s
+                for s in MaskingPipeline._COMMON_INDIAN_SURNAMES
+            }
+            is_first_name = original_lower in {
+                n.lower() for n in (self._INDIAN_MALE_FIRST + self._INDIAN_FEMALE_FIRST)
+            }
+
+            if is_surname and not is_first_name:
+                # It's a surname → return surname only
+                return fake.last_name()
+            else:
+                # It's a first name (or unknown) → return first name only
+                if gender == 'F':
+                    return random.choice(self._INDIAN_FEMALE_FIRST)
+                elif gender == 'M':
+                    return random.choice(self._INDIAN_MALE_FIRST)
+                else:
+                    return random.choice(self._INDIAN_MALE_FIRST + self._INDIAN_FEMALE_FIRST)
         else:
-            first = random.choice(self._INDIAN_MALE_FIRST + self._INDIAN_FEMALE_FIRST)
-        surname = fake.last_name()  # Faker en_IN: 517+ unique Indian surnames
-        return f"{first} {surname}"
+            # Multi-word → full name "First Last"
+            if gender == 'F':
+                first = random.choice(self._INDIAN_FEMALE_FIRST)
+            elif gender == 'M':
+                first = random.choice(self._INDIAN_MALE_FIRST)
+            else:
+                first = random.choice(self._INDIAN_MALE_FIRST + self._INDIAN_FEMALE_FIRST)
+            surname = fake.last_name()
+            return f"{first} {surname}"
 
     def _fake_address(self, original: str) -> str:
         """Generate a realistic Indian address."""
@@ -397,6 +458,11 @@ class PIIMasker:
             else:
                 result.append(char)
         return ''.join(result)
+
+    def _hash_token(self, original: str) -> str:
+        """Deterministic HMAC-SHA256 token for high-cardinality IDs."""
+        digest = hmac.new(self.salt.encode(), original.encode(), hashlib.sha256).hexdigest()
+        return f"ID_{digest[:12].upper()}"
 
     def _redact(self, original: str) -> str:
         """Fallback: replace with a generic redaction marker."""

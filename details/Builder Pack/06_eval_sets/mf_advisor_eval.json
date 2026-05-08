@@ -1,0 +1,91 @@
+{
+  "name": "Mutual Fund Advisor Eval Set",
+  "version": "0.1",
+  "purpose": "Tests an MF-focused advisor across categorisation, tax, behaviour-coaching, switch advice, and regulatory disclosure.",
+  "rubric": {
+    "factual_correctness": "Categories, tax rules, lock-ins, exit loads quoted correctly",
+    "no_specific_recommendation": "Agent must NOT name a specific scheme as 'best buy' — describe categories and trade-offs",
+    "behavioural_coaching": "When user is panicking, agent should acknowledge emotion before facts",
+    "regulatory_disclosure": "Past-performance disclaimer + 'subject to market risks' language",
+    "tone": "Plain, warm, vernacular when needed"
+  },
+  "cases": [
+    {
+      "id": "mf_001",
+      "intent": "category_comparison",
+      "user": "Index fund vs flexicap fund — long term ke liye kaunsa accha?",
+      "must_include": ["index fund: low TER, market-cap weighted, no manager risk", "flexicap: active manager, can rotate across cap sizes", "TER difference impact over 20 years", "alpha vs cost trade-off", "no specific scheme"]
+    },
+    {
+      "id": "mf_002",
+      "intent": "behavioural",
+      "user": "Market 8% gir gaya kal. Mai apna SIP rok du?",
+      "must_include": ["acknowledge stress", "SIPs are designed for falls — that's when you accumulate cheaper units", "stopping = locking in loss without recovery participation", "frame around long-term goal", "no past-performance guarantees"]
+    },
+    {
+      "id": "mf_003",
+      "intent": "switch_advice",
+      "user": "Quant Smallcap me 4 saal SIP kiya. 38% return hai. Switch karu Nifty 50 index me?",
+      "must_include": ["risk profile of smallcap vs largecap", "tax implication of full-redemption: STCG/LTCG calc", "alternative: STP from smallcap to index over 6-12 months to manage tax + market timing risk", "no recommendation either way"]
+    },
+    {
+      "id": "mf_004",
+      "intent": "tax_clarification",
+      "user": "Equity MF, 11 months hold, ₹2L gain. Tax kitna?",
+      "expected_calc": {
+        "holding_period_status": "STCG (≤12 months)",
+        "stcg_rate_post_jul24": 0.20,
+        "tax_on_2L_gain": 40000
+      },
+      "must_include": ["Holding < 12 months = STCG at 20%", "(post Jul-2024 Finance Act change from 15% to 20%)", "no LTCG ₹1.25L exemption applicable here", "advice on holding past 12 months for LTCG tax efficiency, but only if fits goal"]
+    },
+    {
+      "id": "mf_005",
+      "intent": "direct_vs_regular",
+      "user": "10 saal Regular plan me SIP chala. Direct me switch karu? Kitna fayda hua hota?",
+      "must_include": ["Direct TER ~0.5-1% lower than Regular", "compounded over 10y, ~10-15% extra corpus typically", "switch = redemption + re-purchase = exit-load + capital-gains tax event", "STP / phased switch to manage tax", "future SIPs definitely Direct"]
+    },
+    {
+      "id": "mf_006",
+      "intent": "elss_vs_ppf",
+      "user": "₹1.5L 80C ke liye ELSS lu ya PPF?",
+      "must_include": ["ELSS: 3y lockin, equity-linked, ~10-12% historical CAGR (no guarantee), LTCG taxation post-3y", "PPF: 15y lockin (partial withdrawal from year 7), sovereign-backed, EEE tax status, current rate quoted to user reference only", "risk profile + horizon framing"]
+    },
+    {
+      "id": "mf_007",
+      "intent": "international_fund",
+      "user": "Nasdaq 100 fund le sakta hu? Tax kya hoga?",
+      "must_include": ["International funds taxed as debt: gains at slab rate regardless of holding period (post Apr 2023 framework)", "RBI LRS limit reference", "fund-of-fund vs feeder-fund structures", "currency risk note"]
+    },
+    {
+      "id": "mf_008",
+      "intent": "lumpsum_vs_sip",
+      "user": "Mereko ₹10L bonus mila. Pura ek baar invest karu ya 12 month me todke?",
+      "must_include": ["lumpsum vs STP comparison", "STP from liquid into target equity fund over 6-12 months", "research evidence that lumpsum often beats STP over long horizons but reduces regret risk", "user's emotional comfort matters", "no certainty claim"]
+    },
+    {
+      "id": "mf_009",
+      "intent": "regulatory_disclosure",
+      "user": "Past 3 saal me konsa fund best return diya?",
+      "must_include": ["past performance not indicative of future returns disclaimer", "category-level historical numbers OK to cite (not specific scheme as 'best buy')", "redirect to factsheets / AMFI", "advise framework over hot-tip"]
+    },
+    {
+      "id": "mf_010",
+      "intent": "sif_curiosity",
+      "user": "SIF kya hota hai? ₹10 lakh me jaye to kya milega?",
+      "must_include": ["SIF = Specialised Investment Fund (SEBI 2024 framework)", "₹10L minimum", "between MF (₹500) and PMS/AIF (₹50L/₹1Cr) bracket", "long-short / sector-rotation / equity-ex-100 strategies allowed", "still nascent, fewer launches", "tax depends on fund constitution"]
+    },
+    {
+      "id": "mf_011",
+      "intent": "sip_mandate_failure",
+      "user": "SIP debit 3 mahine se fail ho raha hai. SBI ka eMandate hai. Bank pe paisa hai. Kya karu?",
+      "must_include": ["common eMandate failure causes: balance check failure, daily-limit, primary-account mismatch, mandate expired/exhausted", "raise with AMC + bank simultaneously", "BSE/NSE order ID checking flow", "set up fresh mandate via UPI AutoPay if eNACH problematic"]
+    },
+    {
+      "id": "mf_012",
+      "intent": "kyc_modification",
+      "user": "Address change hua hai. Sab MF folios me alag-alag update karna padega?",
+      "must_include": ["CKYC update is centralised — single update reflects across REs", "AMC-level KYC also needs refresh trigger; some require self-confirmation", "process: KRA upload (CAMS/KFin)", "timeline 7-10 days"]
+    }
+  ]
+}
