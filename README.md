@@ -8,7 +8,6 @@ This project is an **Enterprise-grade, Zero-Leakage Data Masking Pipeline**. It 
 👉 **[Read the Full Architecture Deep-Dive here (ARCHITECTURE.md)](ARCHITECTURE.md)**
 
 ## 🖥️ Streamlit Dashboard
-*(Screenshots for Hackathon Judges - Add images here before final submission!)*
 * **Tab 1: Raw Data** - Inspect the generated unstructured fintech logs.
 * **Tab 2: Masked Data** - View the final output and export to CSV, Parquet, or JSONL for fine-tuning.
 * **Tab 4: Privacy vs Utility** - View k-Anonymity and distribution preservation metrics (KDE Plots).
