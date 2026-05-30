@@ -14,14 +14,6 @@ This project is an **Enterprise-grade, Zero-Leakage Data Masking Pipeline**. It 
 * **Tab 4: Privacy vs Utility** - View k-Anonymity and distribution preservation metrics (KDE Plots).
 * **Tab 5: Leakage Auditor** - Run a simulated adversarial attack to prove zero leakage.
 
-## 🏆 How to Win Demo (3-Minute Pitch)
-1. **Show the Problem:** Open the Streamlit App and click "Generate Sample". Point out the messy, unstructured "Comments" column containing hidden Aadhaar numbers and names.
-2. **Run the Pipeline:** Click "Run Masking Pipeline" (Make sure GLiNER NER is enabled in the sidebar!).
-3. **Show the Result:** Go to Tab 2 and show how the messy unstructured text is perfectly masked into realistic synthetic data (e.g., Rajesh -> Sanjay).
-4. **Prove the Math:** Explain that your pipeline isn't just a basic Regex wrapper. Tell them how you implemented the **Verhoeff & Luhn Checksums** to prevent false positives!
-5. **Prove Zero Leakage:** Go to Tab 5 and show the Auditor simulating a reverse-engineering attack, proving 0 leaks.
-6. **Export to LLM:** Go back to Tab 2 and point out the "JSONL (LLM Fine-tuning)" export button to show that it is production-ready for Data Scientists.
-
 ---
 
 ## 🌟 Key Features
