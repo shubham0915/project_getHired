@@ -1,4 +1,4 @@
-# 🛡️ Blostem Data Masking Pipeline v4
+# 🛡️  Data Masking Pipeline v4
 
 ## 📖 Project Overview
 AI models require massive amounts of production data for fine-tuning, but strict privacy laws (like the DPDP Act and GDPR) prohibit the use of Personally Identifiable Information (PII). Traditional masking tools replace data with `[REDACTED]`, destroying the structural integrity and context of the data, making it useless for Machine Learning.
